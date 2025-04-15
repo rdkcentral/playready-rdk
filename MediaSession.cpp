@@ -52,16 +52,6 @@ using namespace std;
 
 namespace CDMi {
 
-// The default location of CDM DRM store.
-// /tmp/drmstore.dat
-
-const DRM_WCHAR g_rgwchCDMDrmStoreName[] = {WCHAR_CAST('/'), WCHAR_CAST('t'), WCHAR_CAST('m'), WCHAR_CAST('p'), WCHAR_CAST('/'),
-                                            WCHAR_CAST('d'), WCHAR_CAST('r'), WCHAR_CAST('m'), WCHAR_CAST('s'), WCHAR_CAST('t'),
-                                            WCHAR_CAST('o'), WCHAR_CAST('r'), WCHAR_CAST('e'), WCHAR_CAST('.'), WCHAR_CAST('d'),
-                                            WCHAR_CAST('a'), WCHAR_CAST('t'), WCHAR_CAST('\0')};
-
-const DRM_CONST_STRING g_dstrCDMDrmStoreName = CREATE_DRM_STRING(g_rgwchCDMDrmStoreName);
-
 const DRM_CONST_STRING *g_rgpdstrRights[1] = {&g_dstrDRM_RIGHT_PLAYBACK};
 // Parse out the first PlayReady initialization header found in the concatenated
 // block of headers in _initData_.
