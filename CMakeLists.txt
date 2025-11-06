@@ -38,6 +38,20 @@ if(DEFINED USE_PLAYREADY_CMAKE)
     find_package(PlayReady REQUIRED)
 endif()
 
+if (BUILD_REFERENCE)
+    add_definitions(-DBUILD_REFERENCE=${BUILD_REFERENCE})
+endif()
+
+if(DEFINED PLAYREADY_BROADCOM)
+    message(STATUS "PLAYREADY_BROADCOM is defined")
+    find_package(WPEFramework REQUIRED)
+    find_package(${NAMESPACE}Core REQUIRED)
+    list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/broadcom")
+    find_package(NEXUS REQUIRED)
+    find_package(NXCLIENT REQUIRED)
+    find_package(NexusPlayready REQUIRED)
+endif()
+
 find_package(OpenSSL REQUIRED)
 
 file(GLOB DRM_PLUGIN_INCLUDES *.h)
@@ -47,11 +61,20 @@ set(DRM_PLUGIN_LIBS
     ${PLAYREADY_LIBRARIES})
 endif()
 
+if(DEFINED PLAYREADY_BROADCOM)
+set(DRM_PLUGIN_LIBS 
+    ${LIBNexusPlayready_LIBRARIES})
+endif()
+
 set(DRM_PLUGIN_SOURCES 
     MediaSession.cpp 
     MediaSystem.cpp
     MediaSessionExt.cpp)
 
+if(DEFINED PLAYREADY_BROADCOM)
+string(REPLACE "-Wl,--as-needed" "" CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS}")
+set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--no-as-needed")
+endif()
 
 # add the library
 add_library(${DRM_PLUGIN_NAME} SHARED ${DRM_PLUGIN_SOURCES})
@@ -61,6 +84,27 @@ target_compile_definitions(${DRM_PLUGIN_NAME} PRIVATE ${PLAYREADY_FLAGS})
 target_include_directories(${DRM_PLUGIN_NAME} PRIVATE ${PLAYREADY_INCLUDE_DIRS})
 target_link_libraries(${DRM_PLUGIN_NAME} ${DRM_PLUGIN_LIBS})
 endif()
+
+if(DEFINED PLAYREADY_BROADCOM)
+add_definitions( -DENABLE_AMBIGUOUS_FIX)
+target_compile_definitions(${DRM_PLUGIN_NAME} 
+    PRIVATE 
+        BSTD_CPU_ENDIAN=BSTD_ENDIAN_LITTLE
+        USE_PK_NAMESPACES=1
+        DRM_INCLUDE_PK_NAMESPACE_USING_STATEMENT=1
+        DRM_BUILD_PROFILE=900
+        USE_SVP=1
+)
+endif()
+
+if(DEFINED PLAYREADY_BROADCOM)
+target_link_libraries(${DRM_PLUGIN_NAME} ${DRM_PLUGIN_LIBS})
+endif()
+
+set_target_properties(${DRM_PLUGIN_NAME} PROPERTIES 
+    CXX_STANDARD 11
+    CXX_STANDARD_REQUIRED YES
+)
 
 set_target_properties(${DRM_PLUGIN_NAME} PROPERTIES SUFFIX ".drm")
 set_target_properties(${DRM_PLUGIN_NAME} PROPERTIES PREFIX "")
@@ -72,8 +116,8 @@ if(DEFINED PLAYREADY_REALTEK)
     target_link_libraries(${DRM_PLUGIN_NAME} PRIVATE playreadypk)
     message(STATUS "PLAYREADY_REALTEK is ON")
 elseif(DEFINED PLAYREADY_BROADCOM)
-    #target_link_libraries(${DRM_PLUGIN_NAME} PRIVATE NEXUS::NEXUS NXCLIENT::NXCLIENT NexusWidevine::NexusWidevine)
-    #message(STATUS "PLAYREADY_BROADCOM is ON")
+    target_link_libraries(${DRM_PLUGIN_NAME} PRIVATE ${NAMESPACE}Core::${NAMESPACE}Core NEXUS::NEXUS NXCLIENT::NXCLIENT NexusPlayready::NexusPlayready)
+    message(STATUS "PLAYREADY_BROADCOM is ON")
 endif()
 
 # Enable SVP.
