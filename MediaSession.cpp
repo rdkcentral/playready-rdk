@@ -817,7 +817,7 @@ CDMi_RESULT MediaKeySession::Load(void) {
 CDMi_RESULT MediaKeySession::SetKeyIdProperty( const DRM_WCHAR *f_rgwchEncodedKid, DRM_DWORD f_cchEncodedKid ){
     DRM_RESULT err = Drm_Content_SetProperty(
             m_poAppContext,
-            DRM_CSP_AUTODETECT_HEADER,
+            DRM_CSP_SELECT_KID,
             (DRM_BYTE*)f_rgwchEncodedKid,
             f_cchEncodedKid * sizeof( DRM_WCHAR ) );
 
