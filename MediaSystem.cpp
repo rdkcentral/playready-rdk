@@ -270,7 +270,7 @@ public:
     {
         const uint32_t MAXLEN = 64;
         char versionStr[MAXLEN];
-#if defined (PLAYREADY_VERSION_4_6)
+#if defined PLAYREADY_VERSION_4_6
         if (g_dstrReqTagPKClientVersionData.cchString >= MAXLEN)
             return "";
         DRM_UTL_DemoteUNICODEtoASCII(g_dstrReqTagPKClientVersionData.pwszString,
@@ -284,7 +284,7 @@ public:
                 versionStr, MAXLEN);
         ((DRM_BYTE*)versionStr)[g_dstrReqTagPlayReadyClientVersionData.cchString] = 0;
         PackedCharsToNativeImpl(versionStr, g_dstrReqTagPlayReadyClientVersionData.cchString + 1);
-#endif /* !defined PLAYREADY_VERSION_4_6 */
+#endif /* PLAYREADY_VERSION_4_6 */
         return string(versionStr);
     }
 
