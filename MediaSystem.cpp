@@ -270,12 +270,21 @@ public:
     {
         const uint32_t MAXLEN = 64;
         char versionStr[MAXLEN];
+#if defined PLAYREADY_VERSION_4_6
+        if (g_dstrReqTagPKClientVersionData.cchString >= MAXLEN)
+            return "";
+        DRM_UTL_DemoteUNICODEtoASCII(g_dstrReqTagPKClientVersionData.pwszString,
+                versionStr, MAXLEN);
+        ((DRM_BYTE*)versionStr)[g_dstrReqTagPKClientVersionData.cchString] = 0;
+        PackedCharsToNativeImpl(versionStr, g_dstrReqTagPKClientVersionData.cchString + 1);
+#else
         if (g_dstrReqTagPlayReadyClientVersionData.cchString >= MAXLEN)
             return "";
         DRM_UTL_DemoteUNICODEtoASCII(g_dstrReqTagPlayReadyClientVersionData.pwszString,
                 versionStr, MAXLEN);
         ((DRM_BYTE*)versionStr)[g_dstrReqTagPlayReadyClientVersionData.cchString] = 0;
         PackedCharsToNativeImpl(versionStr, g_dstrReqTagPlayReadyClientVersionData.cchString + 1);
+#endif /* PLAYREADY_VERSION_4_6 */
         return string(versionStr);
     }
 

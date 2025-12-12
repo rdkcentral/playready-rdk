@@ -145,6 +145,13 @@ else()
     message(STATUS "DRM_ANTI_ROLLBACK_CLOCK_SUPPORT is OFF")
 endif()
 
+if("${PLAYREADY_VERSION_4_6}" STREQUAL "ON")
+    add_definitions( -DPLAYREADY_VERSION_4_6=1 )
+    message(STATUS "PLAYREADY_VERSION_4_6 is ON")
+else()
+    message(STATUS "PLAYREADY_VERSION_4_6 is OFF")
+endif()
+
 if("${NO_PERSISTENT_LICENSE_CHECK}" STREQUAL "ON")
     add_definitions( -DNO_PERSISTENT_LICENSE_CHECK=1 )
     message(STATUS "NO_PERSISTENT_LICENSE_CHECK is ON")
