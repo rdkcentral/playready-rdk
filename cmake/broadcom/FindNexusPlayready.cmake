@@ -35,7 +35,7 @@ find_library(LIBNexusPlayready_LIBRARY playready30pk)
 list(APPEND NeededLibs prdyhttp)
 
 # needed svp libs
-list(APPEND NeededLibs drmrootfs srai)
+list(APPEND NeededLibs drmrootfs srai playready_tl)
 
 foreach (_library ${NeededLibs})
     find_library(LIBRARY_${_library} ${_library})
