@@ -1429,6 +1429,7 @@ CDMi_RESULT MediaKeySession::Decrypt(
   DRM_UINT64 iv_vector[2] = { 0 };
   bool bIsVideoResCheckNeed = false;
   bool bIsDynamicSVPEncEnabled = false;
+  bool bIsAesCBCScheme = false;
   uint64_t mCurrentPixels;
   bool bIsAudioNeedNonSVPContext;
   bool bIsMultipleOpaqueSupportCTR = false;
@@ -1584,12 +1585,17 @@ CDMi_RESULT MediaKeySession::Decrypt(
       pEncryptedData = pEncryptedDataStart;
   }
 
+  if (AesCbc_Cbc1 == sampleInfo->scheme || AesCbc_Cbcs == sampleInfo->scheme)
+  {
+    bIsAesCBCScheme = true;
+  }
+
   /* For Video */
   if (useSVP == true)
   {
     bIsMultipleOpaqueSupportCTR = svpIsMultipleOpaqueSupportCTR();
 
-    if(bIsMultipleOpaqueSupportCTR)
+    if(bIsAesCBCScheme || bIsMultipleOpaqueSupportCTR)
     {
       err = Drm_Reader_DecryptMultipleOpaque(&(m_currentDecryptContext->oDrmDecryptContext),
                                                 encryptedRegionIvCounts,
@@ -1622,7 +1628,7 @@ CDMi_RESULT MediaKeySession::Decrypt(
     bIsAudioNeedNonSVPContext = svpIsAudioNeedNonSVPContext();
     bIsMultipleOpaqueSupportCTR = svpIsMultipleOpaqueSupportCTR();
 
-    if(bIsMultipleOpaqueSupportCTR)
+    if(bIsAesCBCScheme || bIsMultipleOpaqueSupportCTR)
     {
       /* For Audio with Non-SVP support*/
       err = Drm_Reader_DecryptMultipleOpaque(&(bIsAudioNeedNonSVPContext ? m_currentDecryptContext->oDrmDecryptAudioContext :
