@@ -1568,10 +1568,14 @@ CDMi_RESULT MediaKeySession::Decrypt(
     }
   }
 
-  if (sampleInfo->pattern.encrypted_blocks != 0){
-      encryptedRegionSkip.push_back(sampleInfo->pattern.encrypted_blocks);
-      encryptedRegionSkip.push_back(sampleInfo->pattern.clear_blocks);
-  }
+    if (sampleInfo->scheme == AesCbc_Cbcs) {
+        // Always push the pattern for CBCS, even if it's 0:0 for Audio
+        encryptedRegionSkip.push_back(sampleInfo->pattern.encrypted_blocks);
+        encryptedRegionSkip.push_back(sampleInfo->pattern.clear_blocks);
+    } else if (sampleInfo->pattern.encrypted_blocks != 0) {
+        encryptedRegionSkip.push_back(sampleInfo->pattern.encrypted_blocks);
+        encryptedRegionSkip.push_back(sampleInfo->pattern.clear_blocks);
+    }
 
   if (useSVP)
   {
