@@ -1568,10 +1568,14 @@ CDMi_RESULT MediaKeySession::Decrypt(
     }
   }
 
-  if (sampleInfo->pattern.encrypted_blocks != 0){
-      encryptedRegionSkip.push_back(sampleInfo->pattern.encrypted_blocks);
-      encryptedRegionSkip.push_back(sampleInfo->pattern.clear_blocks);
-  }
+    if (sampleInfo->scheme == AesCbc_Cbcs) {
+        // Always push the pattern for CBCS, even if it's 0:0 for Audio
+        encryptedRegionSkip.push_back(sampleInfo->pattern.encrypted_blocks);
+        encryptedRegionSkip.push_back(sampleInfo->pattern.clear_blocks);
+    } else if (sampleInfo->pattern.encrypted_blocks != 0) {
+        encryptedRegionSkip.push_back(sampleInfo->pattern.encrypted_blocks);
+        encryptedRegionSkip.push_back(sampleInfo->pattern.clear_blocks);
+    }
 
   if (useSVP)
   {
@@ -1594,7 +1598,7 @@ CDMi_RESULT MediaKeySession::Decrypt(
       err = Drm_Reader_DecryptMultipleOpaque(&(m_currentDecryptContext->oDrmDecryptContext),
                                                 encryptedRegionIvCounts,
                                                 iv_vector,
-                                                sampleInfo->ivLength == 16 ? iv_vector + 1 : nullptr,
+                                                iv_vector + 1,
                                                 &encryptedRegionCounts,
                                                 encryptedRegionMapping.size(),
                                                 &encryptedRegionMapping[0],
@@ -1629,7 +1633,7 @@ CDMi_RESULT MediaKeySession::Decrypt(
                                                   m_currentDecryptContext->oDrmDecryptContext),
                                                 encryptedRegionIvCounts,
                                                 iv_vector,
-                                                sampleInfo->ivLength == 16 ? iv_vector + 1 : nullptr,
+                                                iv_vector + 1,
                                                 &encryptedRegionCounts,
                                                 encryptedRegionMapping.size(),
                                                 &encryptedRegionMapping[0],
