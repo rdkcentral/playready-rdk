@@ -99,7 +99,7 @@ public:
     KeyId( const DRM_BYTE * , KeyIdOrder);
     void setKeyIdOrder(KeyIdOrder);
     KeyIdOrder getKeyIdOrder();
-    const DRM_BYTE* getmBytes();
+    DRM_BYTE* getmBytes();
     DRM_RESULT  keyDecode( const DRM_CONST_STRING & );
 
     KeyId()

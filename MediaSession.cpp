@@ -87,7 +87,7 @@ KeyId::KeyIdOrder KeyId::getKeyIdOrder()
     return keyIdOrder;
 }
 
-const DRM_BYTE* KeyId::getmBytes()
+DRM_BYTE* KeyId::getmBytes()
 {
     return m_bytes;
 }
