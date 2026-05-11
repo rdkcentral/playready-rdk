@@ -273,7 +273,7 @@ public:
     virtual const char *GetSessionId(void) const;
     virtual const char *GetKeySystem(void) const;
 
-    virtual CDMi_RESULT MediaKeySession::Decrypt(
+    virtual CDMi_RESULT Decrypt(
         uint8_t*                 inData,
         const uint32_t           inDataLength,
         uint8_t**                outData,

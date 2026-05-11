@@ -1411,11 +1411,7 @@ CDMi_RESULT MediaKeySession::Decrypt(
         const SampleInfo*        sampleInfo,
         const IStreamProperties* properties)
 {
-  CDMi_RESULT ret = CDMi_S_FALSE;
-  DRM_RESULT dr = DRM_SUCCESS;
   DRM_RESULT err = DRM_SUCCESS;
-  DRM_UINT64 iv_high = 0;
-  DRM_UINT64 iv_low = 0;
   void* pSecureToken = nullptr;
   uint8_t* pEncryptedDataStart  = nullptr;
   uint32_t actualEncDataLength = 0;
@@ -1432,7 +1428,7 @@ CDMi_RESULT MediaKeySession::Decrypt(
   uint64_t mCurrentPixels;
   bool bIsAudioNeedNonSVPContext;
   bool bIsMultipleOpaqueSupportCTR = false;
-  DRM_DWORD* pDecryptedLength = 0;
+  DRM_DWORD decryptedLength = 0;
   DRM_BYTE* pDecryptedContent = NULL;
   DRM_BYTE*  pEncryptedData = NULL;
 
@@ -1579,7 +1575,7 @@ CDMi_RESULT MediaKeySession::Decrypt(
 
   if (useSVP)
   {
-    pDecryptedLength = reinterpret_cast<DRM_DWORD*>(actualEncDataLength);
+    decryptedLength = actualEncDataLength;
     pDecryptedContent = reinterpret_cast<DRM_BYTE*>(m_stSecureBuffInfo.pPhysAddr);
     pEncryptedData = reinterpret_cast<DRM_BYTE*>(m_stSecureBuffInfo.pEncryptedDataBuffer);
   }
@@ -1606,7 +1602,7 @@ CDMi_RESULT MediaKeySession::Decrypt(
                                                 &encryptedRegionSkip[0],
                                                 (DRM_DWORD) actualEncDataLength,
                                                 (DRM_BYTE *) pEncryptedData,
-                                                reinterpret_cast<DRM_DWORD*>(&pDecryptedLength),
+                                                reinterpret_cast<DRM_DWORD*>(&decryptedLength),
                                                 reinterpret_cast<DRM_BYTE**>(&pDecryptedContent));
     } else {
       err = Drm_Reader_DecryptOpaque(
@@ -1616,7 +1612,7 @@ CDMi_RESULT MediaKeySession::Decrypt(
                         iv_vector[0],
                         actualEncDataLength,
                         (DRM_BYTE *) pEncryptedData,
-                        reinterpret_cast<DRM_DWORD*>(&pDecryptedLength),
+                        reinterpret_cast<DRM_DWORD*>(&decryptedLength),
                         reinterpret_cast<DRM_BYTE**>(&pDecryptedContent));
     }
 
@@ -1641,7 +1637,7 @@ CDMi_RESULT MediaKeySession::Decrypt(
                                                 &encryptedRegionSkip[0],
                                                 (DRM_DWORD) actualEncDataLength,
                                                 (DRM_BYTE *) pEncryptedData,
-                                                reinterpret_cast<DRM_DWORD*>(&pDecryptedLength),
+                                                reinterpret_cast<DRM_DWORD*>(&decryptedLength),
                                                 reinterpret_cast<DRM_BYTE**>(&pDecryptedContent));
     } else {
       err = Drm_Reader_DecryptOpaque(
@@ -1652,7 +1648,7 @@ CDMi_RESULT MediaKeySession::Decrypt(
                         iv_vector[0],
                         actualEncDataLength,
                         (DRM_BYTE *) pEncryptedData,
-                        reinterpret_cast<DRM_DWORD*>(&pDecryptedLength),
+                        reinterpret_cast<DRM_DWORD*>(&decryptedLength),
                         reinterpret_cast<DRM_BYTE**>(&pDecryptedContent));
     }
 
@@ -1671,7 +1667,7 @@ CDMi_RESULT MediaKeySession::Decrypt(
       svp_buffer_free_token(pSecureToken);
     }
 #endif
-    return err;
+    return CDMi_S_FALSE;
   }
 
   if(useSVP)
@@ -1694,7 +1690,7 @@ CDMi_RESULT MediaKeySession::Decrypt(
 
     if(NULL != pDecryptedContent)
     {
-        memcpy((void *)(uint8_t*)pEncryptedDataStart, pDecryptedContent, pDecryptedLength);
+        memcpy((void *)(uint8_t*)pEncryptedDataStart, pDecryptedContent, decryptedLength);
         free(pDecryptedContent);
         pDecryptedContent = NULL;
     }
