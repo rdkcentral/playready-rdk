@@ -286,7 +286,7 @@ CDMi_RESULT MediaKeySession::StoreLicenseData(const uint8_t f_rgbLicenseData[], 
                 }
                 if ( keyId.getKeyIdOrder() == KeyId::KEYID_ORDER_GUID_LE )
                   keyId.ToggleFormat();
-                m_piCallback->OnKeyStatusUpdate("KeyUsable", keyId.getmBytes(), DRM_ID_SIZE);
+                m_piCallback->OnKeyStatusUpdate("KeyUsable", (const uint8_t *)keyId.getmBytes(), DRM_ID_SIZE);
             }
         }
         else

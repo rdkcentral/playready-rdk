@@ -1021,7 +1021,7 @@ ErrorExit:
     {
         for (DECRYPT_CONTEXT &p : m_DecryptContextVector)
         {
-            m_piCallback->OnKeyStatusUpdate(MapDrToKeyMessage( dr ), p->keyId.getmBytes(), DRM_ID_SIZE);
+            m_piCallback->OnKeyStatusUpdate(MapDrToKeyMessage( dr ), (const uint8_t *)p->keyId.getmBytes(), DRM_ID_SIZE);
         }
         m_piCallback->OnKeyStatusesUpdated();
     }
@@ -1229,7 +1229,7 @@ void MediaKeySession::Update(const uint8_t *m_pbKeyMessageResponse, uint32_t  m_
         }
     LoopEnd:
         if ( m_piCallback ){
-            m_piCallback->OnKeyStatusUpdate( MapDrToKeyMessage( dr ), keyId.getmBytes(), DRM_ID_SIZE);
+            m_piCallback->OnKeyStatusUpdate( MapDrToKeyMessage( dr ), (const uint8_t *)keyId.getmBytes(), DRM_ID_SIZE);
         }
     } 
 
