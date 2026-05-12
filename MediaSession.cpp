@@ -1602,8 +1602,8 @@ CDMi_RESULT MediaKeySession::Decrypt(
                                                 &encryptedRegionSkip[0],
                                                 (DRM_DWORD) actualEncDataLength,
                                                 (DRM_BYTE *) pEncryptedData,
-                                                reinterpret_cast<DRM_DWORD*>(&decryptedLength),
-                                                reinterpret_cast<DRM_BYTE**>(&pDecryptedContent));
+                                                &decryptedLength,
+                                                &pDecryptedContent);
     } else {
       err = Drm_Reader_DecryptOpaque(
                         &(m_currentDecryptContext->oDrmDecryptContext),
@@ -1612,8 +1612,8 @@ CDMi_RESULT MediaKeySession::Decrypt(
                         iv_vector[0],
                         actualEncDataLength,
                         (DRM_BYTE *) pEncryptedData,
-                        reinterpret_cast<DRM_DWORD*>(&decryptedLength),
-                        reinterpret_cast<DRM_BYTE**>(&pDecryptedContent));
+                        &decryptedLength,
+                        &pDecryptedContent);
     }
 
   }
@@ -1637,8 +1637,8 @@ CDMi_RESULT MediaKeySession::Decrypt(
                                                 &encryptedRegionSkip[0],
                                                 (DRM_DWORD) actualEncDataLength,
                                                 (DRM_BYTE *) pEncryptedData,
-                                                reinterpret_cast<DRM_DWORD*>(&decryptedLength),
-                                                reinterpret_cast<DRM_BYTE**>(&pDecryptedContent));
+                                                &decryptedLength,
+                                                &pDecryptedContent);
     } else {
       err = Drm_Reader_DecryptOpaque(
                         &(bIsAudioNeedNonSVPContext ? m_currentDecryptContext->oDrmDecryptAudioContext :
@@ -1648,8 +1648,8 @@ CDMi_RESULT MediaKeySession::Decrypt(
                         iv_vector[0],
                         actualEncDataLength,
                         (DRM_BYTE *) pEncryptedData,
-                        reinterpret_cast<DRM_DWORD*>(&decryptedLength),
-                        reinterpret_cast<DRM_BYTE**>(&pDecryptedContent));
+                        &decryptedLength,
+                        &pDecryptedContent);
     }
 
   }
