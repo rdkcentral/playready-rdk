@@ -94,7 +94,6 @@ CDMi_RESULT MediaKeySession::SetDrmHeader(const uint8_t drmHeader[], uint32_t dr
 CDMi_RESULT MediaKeySession::BindKeyNow(DECRYPT_CONTEXT decryptContext)
 {
     DRM_VOID * pvData = nullptr;
-    DRMPFNPOLICYCALLBACK pfnOPLCallback = nullptr;
     DECRYPT_CONTEXT tmpDecryptContext;
     DRM_DWORD decryptionMode;
     bool bIsAudioNeedNonSVPContext;
@@ -287,7 +286,7 @@ CDMi_RESULT MediaKeySession::StoreLicenseData(const uint8_t f_rgbLicenseData[], 
                 }
                 if ( keyId.getKeyIdOrder() == KeyId::KEYID_ORDER_GUID_LE )
                   keyId.ToggleFormat();
-                m_piCallback->OnKeyStatusUpdate("KeyUsable", keyId.getmBytes(), DRM_ID_SIZE);
+                m_piCallback->OnKeyStatusUpdate("KeyUsable", (const uint8_t *)keyId.getmBytes(), DRM_ID_SIZE);
             }
         }
         else

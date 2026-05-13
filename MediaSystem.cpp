@@ -550,7 +550,6 @@ public:
             DRMFILETIME               ftSystemTime; /* Initialized by Drm_SecureTime_GetValue */
             DRM_SECURETIME_CLOCK_TYPE eClockType;   /* Initialized by Drm_SecureTime_GetValue */
 
-            CDMi_RESULT cr = CDMi_SUCCESS;
             DRM_RESULT dr = DRM_SUCCESS;
 
             dr = Drm_SecureTime_GetValue( m_poAppContext.get(), &ftSystemTime, &eClockType  );
@@ -636,8 +635,6 @@ public:
     CDMi_RESULT InitSystemExt() /* override */
     {
         SafeCriticalSection lock(drmAppContextMutex_);
-
-        DRM_BYTE *appOpaqueBuffer = nullptr;
 
         DRM_RESULT err = CPRDrmPlatform::DrmPlatformInitialize();
 
