@@ -1432,7 +1432,11 @@ CDMi_RESULT MediaKeySession::Decrypt(
   DRM_BYTE* pDecryptedContent = NULL;
   DRM_BYTE*  pEncryptedData = NULL;
 
-  assert(sampleInfo->ivLength > 0);
+  if (sampleInfo->ivLength != EXPECTED_AES_CTR_IVDATA_SIZE &&
+      sampleInfo->ivLength != EXPECTED_AES_CBC_IVDATA_SIZE) {
+      fprintf(stderr, "[%s:%d] invalid ivLength %u\n", __FUNCTION__, __LINE__, sampleInfo->ivLength);
+      return CDMi_S_FALSE;
+  }
 
   bIsVideoResCheckNeed = svpIsVideoResCheckNeed();
 
@@ -1478,7 +1482,8 @@ CDMi_RESULT MediaKeySession::Decrypt(
 
   if (properties->InitLength()) {
       // Netflix case
-      memcpy(iv_vector, sampleInfo->iv, sampleInfo->ivLength * sizeof(uint8_t));
+      size_t ivCopyLen = (sampleInfo->ivLength <= sizeof(iv_vector)) ? sampleInfo->ivLength : sizeof(iv_vector);
+      memcpy(iv_vector, sampleInfo->iv, ivCopyLen);
 
   } else {
     // Regular case
