@@ -536,6 +536,7 @@ MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitD
 
   std::string initData(reinterpret_cast<const char*>(f_pbInitData), f_cbInitData);
   std::string playreadyInitData;
+  SafeCriticalSection systemLock(drmAppContextMutex_);
 
   ChkBOOL(m_eKeyState == KEY_CLOSED, DRM_E_INVALIDARG);
 
@@ -708,6 +709,7 @@ void MediaKeySession::Run(const IMediaKeySessionCallback *f_piMediaKeySessionCal
 
 bool MediaKeySession::playreadyGenerateKeyRequest() {
 
+  SafeCriticalSection systemLock(drmAppContextMutex_);
   DRM_RESULT dr = DRM_SUCCESS;
   DRM_DWORD cchSilentURL = 0;
   SAFE_OEM_FREE( m_pbChallenge );
@@ -944,6 +946,7 @@ DRM_RESULT MediaKeySession::ReaderBind(
 }
 
 CDMi_RESULT MediaKeySession::PersistentLicenseCheck() {
+    SafeCriticalSection systemLock(drmAppContextMutex_);
 #ifdef NO_PERSISTENT_LICENSE_CHECK
     // DELIA-51437: The Webkit EME implementation used by OTT apps
     // such as Amazon and YouTube fails when the key is usable from
@@ -1129,6 +1132,7 @@ ErrorExit:
 /*processes the license response and creates decryptor for each valid ack available in the response*/
 void MediaKeySession::Update(const uint8_t *m_pbKeyMessageResponse, uint32_t  m_cbKeyMessageResponse) {
 
+    SafeCriticalSection systemLock(drmAppContextMutex_);
 
     DRM_RESULT dr = DRM_SUCCESS;
     DRM_LICENSE_RESPONSE oLicenseResponse = { eUnknownProtocol, 0 };
@@ -1285,6 +1289,7 @@ void MediaKeySession::DeleteInMemoryLicenses()  {
 
 CDMi_RESULT MediaKeySession::Close(void) {
 
+    SafeCriticalSection systemLock(drmAppContextMutex_);
     if ( m_eKeyState != KEY_CLOSED ) {
 #ifdef USE_SVP
         m_stSecureBuffInfo.bReleaseSecureMemRegion = true;
@@ -1683,6 +1688,12 @@ CDMi_RESULT MediaKeySession::Decrypt(
       gst_svp_header_set_field(m_pSVPContext, header, SvpHeaderFieldName::Type, TokenType::Handle);
     }
 
+    if (actualEncDataLength < svp_token_size()) {
+      svp_buffer_free_token(pSecureToken);
+      m_stSecureBuffInfo.bReleaseSecureMemRegion = false;
+      svp_release_secure_buffers(m_pSVPContext, (void*)&m_stSecureBuffInfo, nullptr , nullptr, 0);
+      return CDMi_S_FALSE;
+    }
     memcpy((void *)(uint8_t*)pEncryptedDataStart, pSecureToken, svp_token_size());
     svp_buffer_free_token(pSecureToken);
   }
@@ -1695,6 +1706,11 @@ CDMi_RESULT MediaKeySession::Decrypt(
 
     if(NULL != pDecryptedContent)
     {
+        if ((size_t)decryptedLength > actualEncDataLength) {
+            free(pDecryptedContent);
+            pDecryptedContent = NULL;
+            return CDMi_S_FALSE;
+        }
         memcpy((void *)(uint8_t*)pEncryptedDataStart, pDecryptedContent, decryptedLength);
         free(pDecryptedContent);
         pDecryptedContent = NULL;
