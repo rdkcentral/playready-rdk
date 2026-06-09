@@ -71,6 +71,13 @@ MediaKeySession::MediaKeySession(const uint8_t drmHeader[], uint32_t drmHeaderLe
 {
 #ifdef USE_SVP
     gst_svp_ext_get_context(&m_pSVPContext, Client, m_rpcID);
+    m_stSecureBuffInfo.bCreateSecureMemRegion = true;
+    m_stSecureBuffInfo.SecureMemRegionSize = 512 * 1024;
+
+    if( 0 != svp_allocate_secure_buffers(m_pSVPContext, (void**)&m_stSecureBuffInfo, nullptr, nullptr, m_stSecureBuffInfo.SecureMemRegionSize))
+    {
+        m_stSecureBuffInfo.SecureMemRegionSize = 0;
+    }
 #endif
 
     mDrmHeader.resize(drmHeaderLength);
@@ -94,7 +101,6 @@ CDMi_RESULT MediaKeySession::SetDrmHeader(const uint8_t drmHeader[], uint32_t dr
 CDMi_RESULT MediaKeySession::BindKeyNow(DECRYPT_CONTEXT decryptContext)
 {
     DRM_VOID * pvData = nullptr;
-    DRMPFNPOLICYCALLBACK pfnOPLCallback = nullptr;
     DECRYPT_CONTEXT tmpDecryptContext;
     DRM_DWORD decryptionMode;
     bool bIsAudioNeedNonSVPContext;
@@ -287,7 +293,7 @@ CDMi_RESULT MediaKeySession::StoreLicenseData(const uint8_t f_rgbLicenseData[], 
                 }
                 if ( keyId.getKeyIdOrder() == KeyId::KEYID_ORDER_GUID_LE )
                   keyId.ToggleFormat();
-                m_piCallback->OnKeyStatusUpdate("KeyUsable", keyId.getmBytes(), DRM_ID_SIZE);
+                m_piCallback->OnKeyStatusUpdate("KeyUsable", (const uint8_t *)keyId.getmBytes(), DRM_ID_SIZE);
             }
         }
         else
