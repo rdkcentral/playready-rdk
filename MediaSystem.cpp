@@ -152,15 +152,17 @@ public:
         IMediaKeySession **f_ppiMediaKeySession) {
         bool isNetflixPlayready = (strstr(keySystem.c_str(), "netflix") != nullptr);
         if (isNetflixPlayready) {
+            SafeCriticalSection systemLock(drmAppContextMutex_);
             if(!m_isAppCtxInitialized)
             {
                 InitializeAppCtx();
-            }     
+            }
             *f_ppiMediaKeySession = new CDMi::MediaKeySession(f_pbInitData, f_cbInitData,  m_poAppContext.get(), !isNetflixPlayready);
          } else {
             *f_ppiMediaKeySession = new CDMi::MediaKeySession(f_pbInitData, f_cbInitData, f_pbCDMData, f_cbCDMData, m_poAppContext.get(), !isNetflixPlayready);
          }
-        return CDMi_SUCCESS; 
+        ++m_sessionCount;
+        return CDMi_SUCCESS;
     }
 
     CDMi_RESULT SetSecureStopPublisherCert( const DRM_BYTE *f_pbPublisherCert, DRM_DWORD f_cbPublisherCert )
@@ -207,6 +209,7 @@ public:
         if ( mediaKeySession != nullptr )
         {
             delete f_piMediaKeySession;
+            if (m_sessionCount > 0) --m_sessionCount;
         }
         else
         {
@@ -252,9 +255,11 @@ public:
             uint32_t drmHeaderLength,
             IMediaKeySessionExt** session) /* override */
     {
+        SafeCriticalSection systemLock(drmAppContextMutex_);
         bool isNetflixPlayready = (strstr(keySystem.c_str(), "netflix") != nullptr);
         printf("\n [TEL ELXSI] isNetflixPlayready is %d",&isNetflixPlayready);
         *session = new CDMi::MediaKeySession(drmHeader, drmHeaderLength, m_poAppContext.get(), !isNetflixPlayready);
+        ++m_sessionCount;
 
         return CDMi_SUCCESS;
     }
@@ -263,6 +268,7 @@ public:
     {
         SafeCriticalSection systemLock(drmAppContextMutex_);
         delete f_piMediaKeySession;
+        if (m_sessionCount > 0) --m_sessionCount;
         return CDMi_SUCCESS;
     }
 
@@ -498,6 +504,11 @@ public:
         bool bIsInitSecureClockNeed = false;
 
         if (m_poAppContext.get() != nullptr) {
+           if (m_sessionCount > 0) {
+               /* Existing MediaKeySession(s) hold raw m_poAppContext.get(); resetting here would dangle them. */
+               fprintf(stderr, "[%s:%d] InitializeAppCtx refused: %u session(s) still hold m_poAppContext\n",__FUNCTION__,__LINE__,m_sessionCount);
+               return CDMi_S_FALSE;
+           }
            m_poAppContext.reset();
         }
 
@@ -608,6 +619,13 @@ public:
     {
         DRM_BYTE *pbOldBuf = nullptr;
         DRM_DWORD cbOldBuf = 0;
+
+        if (m_sessionCount > 0)
+        {
+            /* Existing MediaKeySession(s) hold a raw alias of m_poAppContext.get(); freeing here is a UAF. */
+            fprintf(stderr, "[%s:%d] UninitializeAppCtx refused: %u session(s) still hold m_poAppContext\n",__FUNCTION__,__LINE__,m_sessionCount);
+            return CDMi_S_FALSE;
+        }
 
         m_isAppCtxInitialized = false;
 
@@ -819,6 +837,7 @@ private:
     DRM_BYTE *m_pbPublisherCert = nullptr;
     DRM_DWORD m_cbPublisherCert = 0;
     bool m_isAppCtxInitialized = false;
+    uint32_t m_sessionCount = 0;
 };
 
 static SystemFactoryType<PlayReady> g_instance({"video/x-h264", "audio/mpeg"});
