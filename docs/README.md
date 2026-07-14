@@ -456,7 +456,7 @@ Called by playready-rdk on the `gst-svp-ext` generic interface. Gstreamer SVP-sp
 
 ### Build-Time Configuration Parameters
 
-| CMake Flag                        | Default            | Description                                                                                                                                                                          |
+| Build-Time Option / Define         | Default            | Description                                                                                                                                                                          |
 | --------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `USE_SVP`                         | On (unconditional) | Enables Secure Video Path integration via `gst-svp-ext`. Applied unconditionally across all build configurations.                                                                    |
 | `DRM_ERROR_NAME_SUPPORT`          | Off                | When enabled, appends human-readable DRM error name strings to all log messages.                                                                                                     |
