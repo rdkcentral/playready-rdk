@@ -47,7 +47,7 @@ flowchart LR
 **Key Features & Responsibilities:**
 
 - **License Acquisition**: Generates a PlayReady license challenge from the DRM header present in the content and delivers it to the caller for dispatch to the license server. Processes the license server response and binds the resulting keys to per-key decrypt contexts.
-- **Content Decryption**: Decrypts AES-CTR and AES-CBC / AES-CBCS encrypted media samples using PlayReady opaque decrypt APIs, with subsample mapping support for mixed clear-and-encrypted content.
+- **Content Decryption**: Decrypts AES-CTR, AES-CBC, and AES-CBCS encrypted media samples using PlayReady opaque decrypt APIs, with subsample mapping support for mixed clear-and-encrypted content.
 - **Secure Video Path Integration**: Routes decrypted video samples through protected memory regions using the SVP HAL, preventing video content from passing through normally accessible memory after decryption.
 - **Secure Stop**: Tracks active playback sessions using the PlayReady Secure Stop mechanism and provides challenge generation and response processing APIs to allow a server to verify that playback has ended.
 - **Output Protection Enforcement**: Evaluates license-specified output protection levels for compressed and uncompressed digital video, analog video, and digital audio outputs through a policy callback, and enforces maximum resolution decode constraints received from the license server.
@@ -104,7 +104,7 @@ graph LR
 - **Worker Threads**:
   - _Decrypt caller thread_: Invokes `Decrypt()` on `MediaKeySession`; acquires `drmAppContextMutex_` for the duration of each decrypt operation.
 - **Synchronization**:
-  - `drmAppContextMutex_` — global `CriticalSection` protecting the shared `DRM_APP_CONTEXT` across all PlayReady SDK calls from both system and session layers.
+  - `drmAppContextMutex_` — global `CriticalSection` serializing PlayReady SDK calls that use the shared `DRM_APP_CONTEXT` from both system and session layers.
   - `prPlatformMutex_` — `CriticalSection` with reference counting protecting `Drm_Platform_Initialize` and `Drm_Platform_Uninitialize` in `CPRDrmPlatform`.
   - `prSessionMutex_` — `CriticalSection` protecting `PlayreadySession::InitializeDRM` during session-local context setup.
 - **Async / Event Dispatch**: Key status updates and key messages are delivered synchronously to the registered `IMediaKeySessionCallback` during `Update()`, `Run()`, and error paths. All callbacks are invoked inline on the calling thread.
