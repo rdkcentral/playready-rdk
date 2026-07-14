@@ -412,7 +412,7 @@ Called by playready-rdk directly on SoC-provided PlayReady DRM libraries (path: 
 
 #### gst-svp-ext Component APIs
 
-Called by playready-rdk on the `gst-svp-ext` generic interface. Gstreamer SVP-specific platform handling is passed through by `gst-svp-ext` to the underlying platform HAL layer (path: playready-rdk → gst-svp-ext generic → gst-svp-ext platform HAL).
+Called by playready-rdk on the `gst-svp-ext` generic interface. GStreamer SVP-specific platform handling is passed through by `gst-svp-ext` to the underlying platform HAL layer (path: playready-rdk → gst-svp-ext generic → gst-svp-ext platform HAL).
 
 | gst-svp-ext API                                  | Purpose                                                                               | Implementation File                   |
 | ------------------------------------------------ | ------------------------------------------------------------------------------------- | ------------------------------------- |
