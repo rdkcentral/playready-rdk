@@ -697,10 +697,10 @@ public:
         if (CDMi_SUCCESS != cr)
         {
             fprintf(stderr, "[%s:%d] TeardownSystemExt refused (active sessions?); skipping platform uninit\n",__FUNCTION__,__LINE__);
+            return;
         }
         /* We can do SoC specific de-init requirement for Playready */
         svpPlatformUninitializePlayready();
-    }
 
     CDMi_RESULT TeardownSystemExt() /* override */
     {
