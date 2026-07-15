@@ -151,17 +151,19 @@ public:
         uint32_t f_cbCDMData, 
         IMediaKeySession **f_ppiMediaKeySession) {
         bool isNetflixPlayready = (strstr(keySystem.c_str(), "netflix") != nullptr);
-        if (isNetflixPlayready) {
+        {
             SafeCriticalSection systemLock(drmAppContextMutex_);
-            if(!m_isAppCtxInitialized)
+            if (isNetflixPlayready && !m_isAppCtxInitialized)
             {
                 InitializeAppCtx();
             }
-            *f_ppiMediaKeySession = new CDMi::MediaKeySession(f_pbInitData, f_cbInitData,  m_poAppContext.get(), !isNetflixPlayready);
-         } else {
+            ++m_sessionCount;
+        }
+        if (isNetflixPlayready) {
+            *f_ppiMediaKeySession = new CDMi::MediaKeySession(f_pbInitData, f_cbInitData, m_poAppContext.get(), !isNetflixPlayready);
+        } else {
             *f_ppiMediaKeySession = new CDMi::MediaKeySession(f_pbInitData, f_cbInitData, f_pbCDMData, f_cbCDMData, m_poAppContext.get(), !isNetflixPlayready);
-         }
-        ++m_sessionCount;
+        }
         return CDMi_SUCCESS;
     }
 
@@ -209,6 +211,7 @@ public:
         if ( mediaKeySession != nullptr )
         {
             delete f_piMediaKeySession;
+            SafeCriticalSection systemLock(drmAppContextMutex_);
             if (m_sessionCount > 0) --m_sessionCount;
         }
         else
@@ -255,19 +258,21 @@ public:
             uint32_t drmHeaderLength,
             IMediaKeySessionExt** session) /* override */
     {
-        SafeCriticalSection systemLock(drmAppContextMutex_);
         bool isNetflixPlayready = (strstr(keySystem.c_str(), "netflix") != nullptr);
         printf("\n [TEL ELXSI] isNetflixPlayready is %d",&isNetflixPlayready);
+        {
+            SafeCriticalSection systemLock(drmAppContextMutex_);
+            ++m_sessionCount;
+        }
         *session = new CDMi::MediaKeySession(drmHeader, drmHeaderLength, m_poAppContext.get(), !isNetflixPlayready);
-        ++m_sessionCount;
 
         return CDMi_SUCCESS;
     }
 
     CDMi_RESULT DestroyMediaKeySessionExt(IMediaKeySession *f_piMediaKeySession)
     {
-        SafeCriticalSection systemLock(drmAppContextMutex_);
         delete f_piMediaKeySession;
+        SafeCriticalSection systemLock(drmAppContextMutex_);
         if (m_sessionCount > 0) --m_sessionCount;
         return CDMi_SUCCESS;
     }
