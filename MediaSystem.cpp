@@ -701,6 +701,7 @@ public:
         }
         /* We can do SoC specific de-init requirement for Playready */
         svpPlatformUninitializePlayready();
+    }
 
     CDMi_RESULT TeardownSystemExt() /* override */
     {
