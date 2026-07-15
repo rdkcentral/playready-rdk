@@ -259,8 +259,7 @@ public:
             IMediaKeySessionExt** session) /* override */
     {
         bool isNetflixPlayready = (strstr(keySystem.c_str(), "netflix") != nullptr);
-        printf("\n [TEL ELXSI] isNetflixPlayready is %d",&isNetflixPlayready);
-        {
+        printf("\n [TEL ELXSI] isNetflixPlayready is %d", isNetflixPlayready ? 1 : 0);
             SafeCriticalSection systemLock(drmAppContextMutex_);
             ++m_sessionCount;
         }
