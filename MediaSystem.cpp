@@ -155,7 +155,12 @@ public:
             SafeCriticalSection systemLock(drmAppContextMutex_);
             if (isNetflixPlayready && !m_isAppCtxInitialized)
             {
-                InitializeAppCtx();
+                CDMi_RESULT cr = InitializeAppCtx();
+                if (CDMi_SUCCESS != cr)
+                {
+                    fprintf(stderr, "[%s:%d] InitializeAppCtx failed; refusing session creation\n",__FUNCTION__,__LINE__);
+                    return cr;
+                }
             }
             ++m_sessionCount;
         }
@@ -260,6 +265,7 @@ public:
     {
         bool isNetflixPlayready = (strstr(keySystem.c_str(), "netflix") != nullptr);
         printf("\n [TEL ELXSI] isNetflixPlayready is %d", isNetflixPlayready ? 1 : 0);
+        {
             SafeCriticalSection systemLock(drmAppContextMutex_);
             ++m_sessionCount;
         }
@@ -687,14 +693,18 @@ public:
 
     void Deinitialize(const WPEFramework::PluginHost::IShell * shell)
     {
-        TeardownSystemExt();
+        CDMi_RESULT cr = TeardownSystemExt();
+        if (CDMi_SUCCESS != cr)
+        {
+            fprintf(stderr, "[%s:%d] TeardownSystemExt refused (active sessions?); skipping platform uninit\n",__FUNCTION__,__LINE__);
+        }
         /* We can do SoC specific de-init requirement for Playready */
         svpPlatformUninitializePlayready();
     }
 
     CDMi_RESULT TeardownSystemExt() /* override */
     {
-        SafeCriticalSection lock(drmAppContextMutex_);
+        SafeCriticalSection systemLock(drmAppContextMutex_);
 
         if(!m_poAppContext.get()) {
             fprintf(stderr, "[%s:%d] no app context yet",__FUNCTION__,__LINE__);
@@ -707,9 +717,11 @@ public:
             fprintf(stderr, "[%s:%d] CleanLicenseStore failed. 0x%X - %s",__FUNCTION__,__LINE__,err,DRM_ERR_NAME(err));
         }
 
-        if (CDMi_SUCCESS != UninitializeAppCtx() )
+        CDMi_RESULT cr = UninitializeAppCtx();
+        if (CDMi_SUCCESS != cr)
         {
             fprintf(stderr, "[%s:%d] UninitializeAppCtx failed.",__FUNCTION__,__LINE__);
+            return cr;
         }
 
         delete [] pbRevocationBuffer_;
@@ -734,15 +746,17 @@ public:
 
     CDMi_RESULT DeleteSecureStore() /* override */
     {
-        SafeCriticalSection lock(drmAppContextMutex_);
+        SafeCriticalSection systemLock(drmAppContextMutex_);
         struct stat buf;
-        CDMi_RESULT cr = CDMi_SUCCESS;
 
-        if (CDMi_SUCCESS != UninitializeAppCtx() )
+        CDMi_RESULT cr = UninitializeAppCtx();
+        if (CDMi_SUCCESS != cr)
         {
             fprintf(stderr, "[%s:%d] UninitializeAppCtx failed.",__FUNCTION__,__LINE__);
+            return cr;
         }
 
+        cr = CDMi_SUCCESS;
         if (stat(m_storeLocation.c_str(), &buf) != -1)
         {
             int status = remove(m_storeLocation.c_str());
@@ -756,8 +770,6 @@ public:
                 cr = CDMi_S_FALSE;
             }
         }
-        else
-            cr = CDMi_SUCCESS;
 
         return cr;
     }
