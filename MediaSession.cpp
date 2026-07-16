@@ -1498,12 +1498,21 @@ CDMi_RESULT MediaKeySession::Decrypt(
     }
   }
 
-  if (gst_svp_has_header(m_pSVPContext, inData))
-  {
-
+  if (gst_svp_has_header(m_pSVPContext, inData)) {
     header = (void*)inData;
     pEncryptedDataStart = reinterpret_cast<DRM_BYTE *>(gst_svp_header_get_start_of_data(m_pSVPContext, header));
     gst_svp_header_get_field(m_pSVPContext, header, SvpHeaderFieldName::DataSize, &actualEncDataLength);
+
+    if(useSVP) {
+      /* Ensure that actualEncDataLength has enough space to accommodate the SVP token. */
+      if (actualEncDataLength < svp_token_size()) {
+        fprintf(stderr, "[%s:%d] Invalid encrypted data length %u (token size %u)\n", __FUNCTION__, __LINE__, actualEncDataLength, svp_token_size());
+        return CDMi_S_FALSE;
+      }
+    }
+  } else {
+    pEncryptedDataStart = inData;
+    actualEncDataLength = inDataLength;
   }
 
   if (sampleInfo->subSampleCount > 0) {
@@ -1688,12 +1697,6 @@ CDMi_RESULT MediaKeySession::Decrypt(
       gst_svp_header_set_field(m_pSVPContext, header, SvpHeaderFieldName::Type, TokenType::Handle);
     }
 
-    if (actualEncDataLength < svp_token_size()) {
-      svp_buffer_free_token(pSecureToken);
-      m_stSecureBuffInfo.bReleaseSecureMemRegion = false;
-      svp_release_secure_buffers(m_pSVPContext, (void*)&m_stSecureBuffInfo, nullptr , nullptr, 0);
-      return CDMi_S_FALSE;
-    }
     memcpy((void *)(uint8_t*)pEncryptedDataStart, pSecureToken, svp_token_size());
     svp_buffer_free_token(pSecureToken);
   }
