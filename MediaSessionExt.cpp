@@ -73,6 +73,13 @@ MediaKeySession::MediaKeySession(const uint8_t drmHeader[], uint32_t drmHeaderLe
 
 #ifdef USE_SVP
     gst_svp_ext_get_context(&m_pSVPContext, Client, m_rpcID);
+    m_stSecureBuffInfo.bCreateSecureMemRegion = true;
+    m_stSecureBuffInfo.SecureMemRegionSize = 512 * 1024;
+
+    if( 0 != svp_allocate_secure_buffers(m_pSVPContext, (void**)&m_stSecureBuffInfo, nullptr, nullptr, m_stSecureBuffInfo.SecureMemRegionSize))
+    {
+        m_stSecureBuffInfo.SecureMemRegionSize = 0;
+    }
 #endif
 
     mDrmHeader.resize(drmHeaderLength);
