@@ -151,16 +151,25 @@ public:
         uint32_t f_cbCDMData, 
         IMediaKeySession **f_ppiMediaKeySession) {
         bool isNetflixPlayready = (strstr(keySystem.c_str(), "netflix") != nullptr);
-        if (isNetflixPlayready) {
-            if(!m_isAppCtxInitialized)
+        {
+            SafeCriticalSection systemLock(drmAppContextMutex_);
+            if (isNetflixPlayready && !m_isAppCtxInitialized)
             {
-                InitializeAppCtx();
-            }     
-            *f_ppiMediaKeySession = new CDMi::MediaKeySession(f_pbInitData, f_cbInitData,  m_poAppContext.get(), !isNetflixPlayready);
-         } else {
+                CDMi_RESULT cr = InitializeAppCtx();
+                if (CDMi_SUCCESS != cr)
+                {
+                    fprintf(stderr, "[%s:%d] InitializeAppCtx failed; refusing session creation\n",__FUNCTION__,__LINE__);
+                    return cr;
+                }
+            }
+            ++m_sessionCount;
+        }
+        if (isNetflixPlayready) {
+            *f_ppiMediaKeySession = new CDMi::MediaKeySession(f_pbInitData, f_cbInitData, m_poAppContext.get(), !isNetflixPlayready);
+        } else {
             *f_ppiMediaKeySession = new CDMi::MediaKeySession(f_pbInitData, f_cbInitData, f_pbCDMData, f_cbCDMData, m_poAppContext.get(), !isNetflixPlayready);
-         }
-        return CDMi_SUCCESS; 
+        }
+        return CDMi_SUCCESS;
     }
 
     CDMi_RESULT SetSecureStopPublisherCert( const DRM_BYTE *f_pbPublisherCert, DRM_DWORD f_cbPublisherCert )
@@ -207,6 +216,8 @@ public:
         if ( mediaKeySession != nullptr )
         {
             delete f_piMediaKeySession;
+            SafeCriticalSection systemLock(drmAppContextMutex_);
+            if (m_sessionCount > 0) --m_sessionCount;
         }
         else
         {
@@ -253,7 +264,11 @@ public:
             IMediaKeySessionExt** session) /* override */
     {
         bool isNetflixPlayready = (strstr(keySystem.c_str(), "netflix") != nullptr);
-        printf("\n [TEL ELXSI] isNetflixPlayready is %d",&isNetflixPlayready);
+        fprintf(stderr, "[%s:%d] isNetflixPlayready is %d",__FUNCTION__,__LINE__, isNetflixPlayready);
+        {
+            SafeCriticalSection systemLock(drmAppContextMutex_);
+            ++m_sessionCount;
+        }
         *session = new CDMi::MediaKeySession(drmHeader, drmHeaderLength, m_poAppContext.get(), !isNetflixPlayready);
 
         return CDMi_SUCCESS;
@@ -261,8 +276,9 @@ public:
 
     CDMi_RESULT DestroyMediaKeySessionExt(IMediaKeySession *f_piMediaKeySession)
     {
-        SafeCriticalSection systemLock(drmAppContextMutex_);
         delete f_piMediaKeySession;
+        SafeCriticalSection systemLock(drmAppContextMutex_);
+        if (m_sessionCount > 0) --m_sessionCount;
         return CDMi_SUCCESS;
     }
 
@@ -498,6 +514,11 @@ public:
         bool bIsInitSecureClockNeed = false;
 
         if (m_poAppContext.get() != nullptr) {
+           if (m_sessionCount > 0) {
+               /* Existing MediaKeySession(s) hold raw m_poAppContext.get(); resetting here would dangle them. */
+               fprintf(stderr, "[%s:%d] InitializeAppCtx refused: %u session(s) still hold m_poAppContext\n",__FUNCTION__,__LINE__,m_sessionCount);
+               return CDMi_S_FALSE;
+           }
            m_poAppContext.reset();
         }
 
@@ -609,6 +630,13 @@ public:
         DRM_BYTE *pbOldBuf = nullptr;
         DRM_DWORD cbOldBuf = 0;
 
+        if (m_sessionCount > 0)
+        {
+            /* Existing MediaKeySession(s) hold a raw alias of m_poAppContext.get(); freeing here is a UAF. */
+            fprintf(stderr, "[%s:%d] UninitializeAppCtx refused: %u session(s) still hold m_poAppContext\n",__FUNCTION__,__LINE__,m_sessionCount);
+            return CDMi_S_FALSE;
+        }
+
         m_isAppCtxInitialized = false;
 
         if (m_poAppContext.get() == nullptr)
@@ -665,14 +693,19 @@ public:
 
     void Deinitialize(const WPEFramework::PluginHost::IShell * shell)
     {
-        TeardownSystemExt();
+        CDMi_RESULT cr = TeardownSystemExt();
+        if (CDMi_SUCCESS != cr)
+        {
+            fprintf(stderr, "[%s:%d] TeardownSystemExt refused (active sessions?); skipping platform uninit\n",__FUNCTION__,__LINE__);
+            return;
+        }
         /* We can do SoC specific de-init requirement for Playready */
         svpPlatformUninitializePlayready();
     }
 
     CDMi_RESULT TeardownSystemExt() /* override */
     {
-        SafeCriticalSection lock(drmAppContextMutex_);
+        SafeCriticalSection systemLock(drmAppContextMutex_);
 
         if(!m_poAppContext.get()) {
             fprintf(stderr, "[%s:%d] no app context yet",__FUNCTION__,__LINE__);
@@ -685,9 +718,11 @@ public:
             fprintf(stderr, "[%s:%d] CleanLicenseStore failed. 0x%X - %s",__FUNCTION__,__LINE__,err,DRM_ERR_NAME(err));
         }
 
-        if (CDMi_SUCCESS != UninitializeAppCtx() )
+        CDMi_RESULT cr = UninitializeAppCtx();
+        if (CDMi_SUCCESS != cr)
         {
             fprintf(stderr, "[%s:%d] UninitializeAppCtx failed.",__FUNCTION__,__LINE__);
+            return cr;
         }
 
         delete [] pbRevocationBuffer_;
@@ -712,15 +747,17 @@ public:
 
     CDMi_RESULT DeleteSecureStore() /* override */
     {
-        SafeCriticalSection lock(drmAppContextMutex_);
+        SafeCriticalSection systemLock(drmAppContextMutex_);
         struct stat buf;
-        CDMi_RESULT cr = CDMi_SUCCESS;
 
-        if (CDMi_SUCCESS != UninitializeAppCtx() )
+        CDMi_RESULT cr = UninitializeAppCtx();
+        if (CDMi_SUCCESS != cr)
         {
             fprintf(stderr, "[%s:%d] UninitializeAppCtx failed.",__FUNCTION__,__LINE__);
+            return cr;
         }
 
+        cr = CDMi_SUCCESS;
         if (stat(m_storeLocation.c_str(), &buf) != -1)
         {
             int status = remove(m_storeLocation.c_str());
@@ -734,8 +771,6 @@ public:
                 cr = CDMi_S_FALSE;
             }
         }
-        else
-            cr = CDMi_SUCCESS;
 
         return cr;
     }
@@ -819,6 +854,7 @@ private:
     DRM_BYTE *m_pbPublisherCert = nullptr;
     DRM_DWORD m_cbPublisherCert = 0;
     bool m_isAppCtxInitialized = false;
+    uint32_t m_sessionCount = 0;
 };
 
 static SystemFactoryType<PlayReady> g_instance({"video/x-h264", "audio/mpeg"});

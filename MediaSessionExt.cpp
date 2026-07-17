@@ -69,6 +69,8 @@ MediaKeySession::MediaKeySession(const uint8_t drmHeader[], uint32_t drmHeaderLe
    , m_decryptInited(false)
    , m_bDRMInitializedLocally(false)
 {
+    ZEROMEM(m_rgchSessionID, SIZEOF(m_rgchSessionID));
+
 #ifdef USE_SVP
     gst_svp_ext_get_context(&m_pSVPContext, Client, m_rpcID);
     m_stSecureBuffInfo.bCreateSecureMemRegion = true;
@@ -93,6 +95,7 @@ uint32_t MediaKeySession::GetSessionIdExt() const
 
 CDMi_RESULT MediaKeySession::SetDrmHeader(const uint8_t drmHeader[], uint32_t drmHeaderLength)
 {
+    SafeCriticalSection systemLock(drmAppContextMutex_);
     mDrmHeader.resize(drmHeaderLength);
     memcpy(&mDrmHeader[0], drmHeader, drmHeaderLength);
     return CDMi_SUCCESS;

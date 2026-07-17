@@ -536,6 +536,7 @@ MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitD
 
   std::string initData(reinterpret_cast<const char*>(f_pbInitData), f_cbInitData);
   std::string playreadyInitData;
+  SafeCriticalSection systemLock(drmAppContextMutex_);
 
   ChkBOOL(m_eKeyState == KEY_CLOSED, DRM_E_INVALIDARG);
 
@@ -708,6 +709,7 @@ void MediaKeySession::Run(const IMediaKeySessionCallback *f_piMediaKeySessionCal
 
 bool MediaKeySession::playreadyGenerateKeyRequest() {
 
+  SafeCriticalSection systemLock(drmAppContextMutex_);
   DRM_RESULT dr = DRM_SUCCESS;
   DRM_DWORD cchSilentURL = 0;
   SAFE_OEM_FREE( m_pbChallenge );
@@ -944,6 +946,7 @@ DRM_RESULT MediaKeySession::ReaderBind(
 }
 
 CDMi_RESULT MediaKeySession::PersistentLicenseCheck() {
+    SafeCriticalSection systemLock(drmAppContextMutex_);
 #ifdef NO_PERSISTENT_LICENSE_CHECK
     // DELIA-51437: The Webkit EME implementation used by OTT apps
     // such as Amazon and YouTube fails when the key is usable from
@@ -1129,6 +1132,7 @@ ErrorExit:
 /*processes the license response and creates decryptor for each valid ack available in the response*/
 void MediaKeySession::Update(const uint8_t *m_pbKeyMessageResponse, uint32_t  m_cbKeyMessageResponse) {
 
+    SafeCriticalSection systemLock(drmAppContextMutex_);
 
     DRM_RESULT dr = DRM_SUCCESS;
     DRM_LICENSE_RESPONSE oLicenseResponse = { eUnknownProtocol, 0 };
@@ -1285,6 +1289,7 @@ void MediaKeySession::DeleteInMemoryLicenses()  {
 
 CDMi_RESULT MediaKeySession::Close(void) {
 
+    SafeCriticalSection systemLock(drmAppContextMutex_);
     if ( m_eKeyState != KEY_CLOSED ) {
 #ifdef USE_SVP
         m_stSecureBuffInfo.bReleaseSecureMemRegion = true;
@@ -1432,7 +1437,11 @@ CDMi_RESULT MediaKeySession::Decrypt(
   DRM_BYTE* pDecryptedContent = NULL;
   DRM_BYTE*  pEncryptedData = NULL;
 
-  assert(sampleInfo->ivLength > 0);
+  if (sampleInfo->ivLength != EXPECTED_AES_CTR_IVDATA_SIZE &&
+      sampleInfo->ivLength != EXPECTED_AES_CBC_IVDATA_SIZE) {
+      fprintf(stderr, "[%s:%d] invalid ivLength %u\n", __FUNCTION__, __LINE__, sampleInfo->ivLength);
+      return CDMi_S_FALSE;
+  }
 
   bIsVideoResCheckNeed = svpIsVideoResCheckNeed();
 
@@ -1478,7 +1487,8 @@ CDMi_RESULT MediaKeySession::Decrypt(
 
   if (properties->InitLength()) {
       // Netflix case
-      memcpy(iv_vector, sampleInfo->iv, sampleInfo->ivLength * sizeof(uint8_t));
+      size_t ivCopyLen = (sampleInfo->ivLength <= sizeof(iv_vector)) ? sampleInfo->ivLength : sizeof(iv_vector);
+      memcpy(iv_vector, sampleInfo->iv, ivCopyLen);
 
   } else {
     // Regular case
@@ -1488,12 +1498,21 @@ CDMi_RESULT MediaKeySession::Decrypt(
     }
   }
 
-  if (gst_svp_has_header(m_pSVPContext, inData))
-  {
-
+  if (gst_svp_has_header(m_pSVPContext, inData)) {
     header = (void*)inData;
     pEncryptedDataStart = reinterpret_cast<DRM_BYTE *>(gst_svp_header_get_start_of_data(m_pSVPContext, header));
     gst_svp_header_get_field(m_pSVPContext, header, SvpHeaderFieldName::DataSize, &actualEncDataLength);
+  } else {
+    pEncryptedDataStart = inData;
+    actualEncDataLength = inDataLength;
+  }
+
+  if(useSVP) {
+    /* Ensure that actualEncDataLength has enough space to accommodate the SVP token. */
+    if (actualEncDataLength < svp_token_size()) {
+      fprintf(stderr, "[%s:%d] Invalid encrypted data length %u (token size %u)\n", __FUNCTION__, __LINE__, actualEncDataLength, svp_token_size());
+      return CDMi_S_FALSE;
+    }
   }
 
   if (sampleInfo->subSampleCount > 0) {
@@ -1690,6 +1709,11 @@ CDMi_RESULT MediaKeySession::Decrypt(
 
     if(NULL != pDecryptedContent)
     {
+        if ((size_t)decryptedLength > actualEncDataLength) {
+            free(pDecryptedContent);
+            pDecryptedContent = NULL;
+            return CDMi_S_FALSE;
+        }
         memcpy((void *)(uint8_t*)pEncryptedDataStart, pDecryptedContent, decryptedLength);
         free(pDecryptedContent);
         pDecryptedContent = NULL;
