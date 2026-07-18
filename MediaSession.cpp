@@ -524,14 +524,7 @@ MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitD
 #ifdef USE_SVP
   gst_svp_ext_get_context(&m_pSVPContext, Client, 0);
 
-  m_stSecureBuffInfo.bCreateSecureMemRegion = true;
-  m_stSecureBuffInfo.SecureMemRegionSize = 512 * 1024;
-
-  if( 0 != svp_allocate_secure_buffers(m_pSVPContext, (void**)&m_stSecureBuffInfo, nullptr, nullptr, m_stSecureBuffInfo.SecureMemRegionSize))
-  {
-      /* No need to break here */
-      m_stSecureBuffInfo.SecureMemRegionSize = 0;
-  }
+  svp_init_secure_memory(m_pSVPContext, (void**)&m_stSecureBuffInfo);
 #endif
 
   std::string initData(reinterpret_cast<const char*>(f_pbInitData), f_cbInitData);
@@ -621,6 +614,15 @@ MediaKeySession::~MediaKeySession(void)
 {
     mMaxResDecodePixels = 0;
     mMaxResDecodeSet = false;
+#ifdef USE_SVP
+    if(0 != svp_deinit_secure_memory(m_pSVPContext, (void*)&m_stSecureBuffInfo))
+    {
+        fprintf(stderr, "[%s:%d]  secure memory, free failed",__FUNCTION__,__LINE__);
+    }
+
+    gst_svp_ext_free_context(m_pSVPContext);
+    m_pSVPContext = NULL;
+#endif
     Close();
 
 }
@@ -1291,19 +1293,6 @@ CDMi_RESULT MediaKeySession::Close(void) {
 
     SafeCriticalSection systemLock(drmAppContextMutex_);
     if ( m_eKeyState != KEY_CLOSED ) {
-#ifdef USE_SVP
-        m_stSecureBuffInfo.bReleaseSecureMemRegion = true;
-        if(0 != svp_release_secure_buffers(m_pSVPContext, (void*)&m_stSecureBuffInfo, nullptr, nullptr, 0))
-        {
-            fprintf(stderr, "[%s:%d]  secure memory, free failed",__FUNCTION__,__LINE__);
-        }
-        else {
-            m_stSecureBuffInfo.bCreateSecureMemRegion = false;
-            m_stSecureBuffInfo.SecureMemRegionSize = 0;
-        }
-        gst_svp_ext_free_context(m_pSVPContext);
-        m_pSVPContext = NULL;
-#endif
 
         SAFE_OEM_FREE(m_pbChallenge);
 
@@ -1529,26 +1518,6 @@ CDMi_RESULT MediaKeySession::Decrypt(
 
   if(useSVP)
   {
-    // Reallocate input memory if needed.
-    if(m_stSecureBuffInfo.bCreateSecureMemRegion)
-    {
-        if (actualEncDataLength >  m_stSecureBuffInfo.SecureMemRegionSize) {
-            m_stSecureBuffInfo.bReleaseSecureMemRegion = true;
-            if(0 != svp_release_secure_buffers(m_pSVPContext, (void*)&m_stSecureBuffInfo, nullptr, nullptr, 0))
-            {
-                fprintf(stderr, "[%s:%d]  Secure memory free falied",__FUNCTION__,__LINE__);
-                return CDMi_S_FALSE;
-            }
-            m_stSecureBuffInfo.SecureMemRegionSize = actualEncDataLength;
-            m_stSecureBuffInfo.bReleaseSecureMemRegion = false;
-
-            if(0 != svp_allocate_secure_buffers(m_pSVPContext, (void**)&m_stSecureBuffInfo, nullptr, nullptr, m_stSecureBuffInfo.SecureMemRegionSize))
-            {
-                fprintf(stderr, "[%s:%d] Secure memory, re-allocation failed %d",__FUNCTION__,__LINE__, m_stSecureBuffInfo.SecureMemRegionSize);
-                return CDMi_S_FALSE;
-            }
-        }
-    }
 
     m_stSecureBuffInfo.patternClearBlocks = sampleInfo->pattern.clear_blocks;
 
@@ -1566,18 +1535,16 @@ CDMi_RESULT MediaKeySession::Decrypt(
     bGstSvpStatus = svp_buffer_alloc_token(&pSecureToken);
     if (!bGstSvpStatus) {
         fprintf(stderr, "[%s:%d]  memory allocation for Token is failure",__FUNCTION__,__LINE__);
-        m_stSecureBuffInfo.bReleaseSecureMemRegion = false;
         // Free decrypted secure buffer.
-        svp_release_secure_buffers(m_pSVPContext, (void*)&m_stSecureBuffInfo, (void*)m_stSecureBuffInfo.pAVSecBuffer , nullptr, 0);
+        svp_release_secure_buffers(m_pSVPContext, (void*)&m_stSecureBuffInfo, nullptr, nullptr, 0);
         return CDMi_S_FALSE;
     }
 
     bGstSvpStatus = svp_buffer_to_token(m_pSVPContext, (void *)&m_stSecureBuffInfo, pSecureToken);
     if (!bGstSvpStatus) {
         fprintf(stderr, "[%s:%d]  Buffer to Token creation is failure",__FUNCTION__,__LINE__);
-        m_stSecureBuffInfo.bReleaseSecureMemRegion = false;
         // Free decrypted secure buffer.
-        svp_release_secure_buffers(m_pSVPContext, (void*)&m_stSecureBuffInfo, (void*)m_stSecureBuffInfo.pAVSecBuffer , nullptr, 0);
+        svp_release_secure_buffers(m_pSVPContext, (void*)&m_stSecureBuffInfo, nullptr, nullptr, 0);
         svp_buffer_free_token(pSecureToken);
         return CDMi_S_FALSE;
     }
@@ -1680,9 +1647,8 @@ CDMi_RESULT MediaKeySession::Decrypt(
 #ifdef USE_SVP
     if (useSVP)
     {
-      m_stSecureBuffInfo.bReleaseSecureMemRegion = false;
       // Free decrypted secure buffer.
-      svp_release_secure_buffers(m_pSVPContext, (void*)&m_stSecureBuffInfo, (void*)m_stSecureBuffInfo.pAVSecBuffer , nullptr, 0);
+      svp_release_secure_buffers(m_pSVPContext, (void*)&m_stSecureBuffInfo, nullptr , nullptr, 0);
       svp_buffer_free_token(pSecureToken);
     }
 #endif
@@ -1699,6 +1665,9 @@ CDMi_RESULT MediaKeySession::Decrypt(
 
     memcpy((void *)(uint8_t*)pEncryptedDataStart, pSecureToken, svp_token_size());
     svp_buffer_free_token(pSecureToken);
+
+    // Free decrypted secure buffer.
+    svp_release_secure_buffers(m_pSVPContext, (void*)&m_stSecureBuffInfo, nullptr, nullptr, 0);
   }
   else
   {
@@ -1719,13 +1688,6 @@ CDMi_RESULT MediaKeySession::Decrypt(
         pDecryptedContent = NULL;
     }
 
-  }
-
-  if (useSVP)
-  {
-    m_stSecureBuffInfo.bReleaseSecureMemRegion = false;
-    // Free decrypted secure buffer.
-    svp_release_secure_buffers(m_pSVPContext, (void*)&m_stSecureBuffInfo, nullptr , nullptr, 0);
   }
 
   if (!m_fCommit) {
