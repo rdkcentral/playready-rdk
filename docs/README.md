@@ -13,8 +13,8 @@ flowchart LR
 
 %% Apps Layer
     subgraph Apps["Apps & Runtimes"]
-        FBApps["Firebolt Apps"]
-        WPE_RT["WPE Runtime"]
+        FireboltApps["Firebolt Apps"]
+        WPERuntime["WPE Runtime"]
     end
 
 %% Middleware
@@ -26,22 +26,22 @@ flowchart LR
 
 %% Vendor Layer
     subgraph VL["Vendor Layer"]
-        PRSDK["PlayReady SDK\n(SoC DRM Libraries)"]
-        SVP_GEN["gst-svp-ext\n(Generic Interface)"]
-        SVP_HAL["gst-svp-ext\n(Platform HAL)"]
-        SVP_GEN --> SVP_HAL
+        PlayReadySDK["PlayReady SDK\n(SoC DRM Libraries)"]
+        SvpGeneric["gst-svp-ext\n(Generic Interface)"]
+        SvpHAL["gst-svp-ext\n(Platform HAL)"]
+        SvpGeneric --> SvpHAL
     end
 
     subgraph Cloud["Cloud Services"]
-        LicServer["License Server"]
+        LicenseServer["License Server"]
     end
 
     Apps -->|"EME / OCDM API"| Thunder
     Thunder --> OCDM
     OCDM -->|"CDMi IMediaKeys"| PR
-    PR -->|"Drm_* APIs\n(SoC DRM libs)"| PRSDK
-    PR -->|"svp_* APIs"| SVP_GEN
-    PR -.->|"License Challenge / Response"| LicServer
+    PR -->|"Drm_* APIs\n(SoC DRM libs)"| PlayReadySDK
+    PR -->|"svp_* APIs"| SvpGeneric
+    PR -.->|"License Challenge / Response"| LicenseServer
 ```
 
 **Key Features & Responsibilities:**
@@ -59,7 +59,7 @@ flowchart LR
 
 The component is structured around two layers: a system-level context managed by the `PlayReady` class in `MediaSystem.cpp`, and a per-session context managed by `MediaKeySession` in `MediaSession.cpp` and `MediaSessionExt.cpp`. The system layer initializes the PlayReady platform and maintains the shared `DRM_APP_CONTEXT` that sessions within the same instance share. The session layer manages individual key state machines, license challenge-response cycles, and decrypt context binding. This separation allows multiple concurrent sessions — such as those needed for multi-period content or adaptive bitrate streams with multiple key IDs — to share a single application context while maintaining independent key states.
 
-PlayReady SDK calls that use the shared `DRM_APP_CONTEXT` are serialized through a global `CriticalSection` (`drmAppContextMutex_`) to ensure thread safety. Platform initialization is guarded separately by `prPlatformMutex_` using a reference counter, and session-local setup is protected by `prSessionMutex_`.
+PlayReady SDK calls that use the shared `DRM_APP_CONTEXT` are serialized through a global `CriticalSection` (`drmAppContextMutex_`) to ensure thread safety. Platform initialization is guarded separately by `prPlatformMutex_` using a reference counter so that concurrent callers do not double-initialize. Session construction is protected by `prSessionMutex_`.
 
 The component's northbound interface is the CDMi `IMediaKeys` and `IMediaKeysExt` API consumed by the WPEFramework OCDM Plugin (OpenCDMi) — the Thunder plugin responsible for discovering and loading CDMi backend shared libraries and routing EME-layer requests to them. Its southbound interface covers two paths: PlayReady SDK calls for all DRM operations (directed to SoC-provided DRM libraries), and `gst-svp-ext` calls for SVP secure memory management — `gst-svp-ext` provides a generic interface where GStreamer SVP-specific platform handling is passed through to the underlying platform HAL. Configuration is delivered as a JSON string at `Initialize()` time, from which the DRM data directory, store path, and HOME environment variable are extracted.
 
@@ -84,17 +84,17 @@ graph LR
         end
     end
 
-    PRSDK["PlayReady SDK\n(SoC DRM Libraries)"]
-    SVP_GEN["gst-svp-ext\n(Generic Interface)"]
-    SVP_HAL["gst-svp-ext\n(Platform HAL)"]
-    SVP_GEN --> SVP_HAL
+    PlayReadySDK["PlayReady SDK\n(SoC DRM Libraries)"]
+    SvpGeneric["gst-svp-ext\n(Generic Interface)"]
+    SvpHAL["gst-svp-ext\n(Platform HAL)"]
+    SvpGeneric --> SvpHAL
 
     OCDM -->|"System APIs"| SysL
     OCDM -->|"Session APIs"| SessL
     SysL --> Mutex
     SessL --> Mutex
-    Mutex --> PRSDK
-    SessL -->|"svp_* calls"| SVP_GEN
+    Mutex --> PlayReadySDK
+    SessL -->|"svp_* calls"| SvpGeneric
 ```
 
 ### Threading Model
@@ -456,7 +456,7 @@ Called by playready-rdk on the `gst-svp-ext` generic interface. GStreamer SVP-sp
 
 ### Build-Time Configuration Parameters
 
-| Build-Time Option / Define         | Default            | Description                                                                                                                                                                          |
+| Build-Time Option / Define        | Default            | Description                                                                                                                                                                          |
 | --------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `USE_SVP`                         | On (unconditional) | Enables Secure Video Path integration via `gst-svp-ext`. Applied unconditionally across all build configurations.                                                                    |
 | `DRM_ERROR_NAME_SUPPORT`          | Off                | When enabled, appends human-readable DRM error name strings to all log messages.                                                                                                     |
