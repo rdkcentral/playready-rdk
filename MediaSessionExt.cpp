@@ -523,7 +523,7 @@ CDMi_RESULT MediaKeySession::GetChallengeDataExt(uint8_t * f_pChallenge, uint32_
     }
 
     std::string base64Header = convertToBase64(mDrmHeader);
-    PR_LOG(PR_LOG_DEBUG, "DRM Header size[%u] (String):[%s]",mDrmHeader.size(), base64Header.c_str());
+    PR_LOG(PR_LOG_TRACE, "DRM Header size[%u] (String):[%s]",mDrmHeader.size(), base64Header.c_str());
 
     ASSERT(m_poAppContext != nullptr);
 

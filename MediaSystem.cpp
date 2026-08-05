@@ -273,7 +273,7 @@ public:
         }
         else
         {
-            PR_LOG(PR_LOG_WARN, "mediaKeySession is invalid", m_sessionCount);
+            PR_LOG(PR_LOG_WARN, "mediaKeySession is invalid m_sessionCount[%d]", m_sessionCount);
         }
         PR_LOG(PR_LOG_DEBUG, "exit");
         return CDMi_SUCCESS;
@@ -493,7 +493,9 @@ public:
 
         if (f_cbChallenge == 0 || f_pbChallenge == nullptr )
         {
-            PR_LOG(PR_LOG_ERROR, "Invalid argument: f_cbChallenge[%d] f_pbChallenge[0x%X]", f_cbChallenge, f_pbChallenge);
+            PR_LOG(PR_LOG_ERROR, "Invalid argument: f_cbChallenge[%u] f_pbChallenge[%p]",
+                                                                static_cast<unsigned>(f_cbChallenge),
+                                                                static_cast<void*>(f_pbChallenge));
             return CDMi_INVALID_ARG;
         }
 
@@ -553,7 +555,7 @@ public:
 
         if ( f_sessionIDLength < DRM_ID_SIZE )
         {
-            PR_LOG(PR_LOG_ERROR, "nvalid argument: sessionIDlength %zu, expecting %zu ",f_sessionIDLength,DRM_ID_SIZE);
+            PR_LOG(PR_LOG_ERROR, "Invalid argument: sessionIDlength %zu, expecting %zu ",f_sessionIDLength,DRM_ID_SIZE);
             return CDMi_INVALID_ARG;
         }
 
@@ -610,7 +612,9 @@ public:
         g_dstrCDMDrmStoreName.pwszString = createDrmWchar(store);
         g_dstrCDMDrmStoreName.cchString = store.length();
 
-        PR_LOG(PR_LOG_DEBUG, "g_dstrCDMDrmStoreName[%s]", g_dstrCDMDrmStoreName.pwszString);
+        PR_LOG(PR_LOG_DEBUG, "g_dstrCDMDrmStoreName.pwszString[%p] cchString[%u]",
+                                static_cast<void*>(g_dstrCDMDrmStoreName.pwszString),
+                                g_dstrCDMDrmStoreName.cchString);
 
         // Init revocation buffer.
         pbRevocationBuffer_ = new DRM_BYTE[REVOCATION_BUFFER_SIZE];
@@ -665,7 +669,7 @@ public:
                 (err == DRM_E_DST_CORRUPTED)) {
 
             PR_LOG(PR_LOG_WARN, "Drm_Initialize failed. 0x%X - %s",err,DRM_ERR_NAME(err));
-            PR_LOG(PR_LOG_WARN, "Remove store path and try again",err,DRM_ERR_NAME(err));
+            PR_LOG(PR_LOG_WARN, "Remove store path and try again");
             //if drmstore file is corrupted, remove it and init again, playready will create a new one
             remove(GetDrmStorePath().c_str());
             err = Drm_Initialize(m_poAppContext.get(), pDrmOemContext,

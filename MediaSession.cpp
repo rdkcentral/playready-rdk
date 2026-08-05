@@ -1472,7 +1472,7 @@ CDMi_RESULT MediaKeySession::PlaybackStopped(void) {
 
 const char* MediaKeySession::MapDrToKeyMessage( DRM_RESULT dr )
 {
-    PR_LOG(PR_LOG_DEBUG, "key mesasge: 0x%X - %s",dr,DRM_ERR_NAME(dr));
+    PR_LOG(PR_LOG_DEBUG, "key message: 0x%X - %s",dr,DRM_ERR_NAME(dr));
     switch (dr)
     {
     case DRM_SUCCESS:
@@ -1733,7 +1733,7 @@ CDMi_RESULT MediaKeySession::Decrypt(
 
     bGstSvpStatus = svp_buffer_to_token(m_pSVPContext, (void *)&m_stSecureBuffInfo, pSecureToken);
     if (!bGstSvpStatus) {
-        PR_LOG(PR_LOG_ERROR, "Buffer to Token creation is failed %d");
+        PR_LOG(PR_LOG_ERROR, "Buffer to Token creation is failed");
         m_stSecureBuffInfo.bReleaseSecureMemRegion = false;
         // Free decrypted secure buffer.
         svp_release_secure_buffers(m_pSVPContext, (void*)&m_stSecureBuffInfo, (void*)m_stSecureBuffInfo.pAVSecBuffer , nullptr, 0);
@@ -1910,7 +1910,7 @@ CDMi_RESULT MediaKeySession::ReleaseClearContent(
     const uint32_t  f_cbClearContentOpaque,
     uint8_t  *f_pbClearContentOpaque ) {
   
-  PR_LOG(PR_LOG_DEBUG, "Not implemented [%u] ");
+  PR_LOG(PR_LOG_DEBUG, "Not implemented");
   return CDMi_SUCCESS;
 }
 
