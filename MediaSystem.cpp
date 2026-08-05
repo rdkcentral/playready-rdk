@@ -612,10 +612,6 @@ public:
         g_dstrCDMDrmStoreName.pwszString = createDrmWchar(store);
         g_dstrCDMDrmStoreName.cchString = store.length();
 
-        PR_LOG(PR_LOG_DEBUG, "g_dstrCDMDrmStoreName.pwszString[%p] cchString[%u]",
-                                static_cast<void*>(g_dstrCDMDrmStoreName.pwszString),
-                                g_dstrCDMDrmStoreName.cchString);
-
         // Init revocation buffer.
         pbRevocationBuffer_ = new DRM_BYTE[REVOCATION_BUFFER_SIZE];
         PR_LOG(PR_LOG_DEBUG, "exit");
