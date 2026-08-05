@@ -320,16 +320,35 @@ public:
     {
         bool isNetflixPlayready = (strstr(keySystem.c_str(), "netflix") != nullptr);
         PR_LOG(PR_LOG_DEBUG, "entry isNetflixPlayready[%d] m_sessionCount[%d]", isNetflixPlayready, m_sessionCount);
+
+        if(session == NULL) {
+            PR_LOG(PR_LOG_DEBUG, "Invalid input, session is null");
+            return CDMi_INVALID_ARG;
+        }
+
+        if (isNetflixPlayready) {
+            if (!m_isAppCtxInitialized || m_poAppContext.get() == nullptr) {
+                PR_LOG(PR_LOG_DEBUG, "m_isAppCtxInitialized[%d] and call InitializeAppCtx", m_isAppCtxInitialized);
+                if (CDMi_SUCCESS != InitializeAppCtx())
+                {
+                    PR_LOG(PR_LOG_ERROR, "InitializeAppCtx failed");
+                    return CDMi_S_FALSE;
+                }
+            } else {
+                PR_LOG(PR_LOG_DEBUG, "m_isAppCtxInitialized is valid");
+            }
+        }
+
         {
             SafeCriticalSection systemLock(drmAppContextMutex_);
             ++m_sessionCount;
         }
+
         *session = new CDMi::MediaKeySession(drmHeader, drmHeaderLength, m_poAppContext.get(), !isNetflixPlayready);
 
         PR_LOG(PR_LOG_DEBUG, "exit");
         return CDMi_SUCCESS;
     }
-
 
     CDMi_RESULT DestroyMediaKeySessionExt(IMediaKeySession *f_piMediaKeySession)
     {
@@ -885,16 +904,21 @@ public:
 
     CDMi_RESULT DeleteSecureStore() /* override */
     {
-        SafeCriticalSection systemLock(drmAppContextMutex_);
+        CDMi_RESULT cr = CDMi_SUCCESS;
+        DRM_RESULT  dr = DRM_SUCCESS;
         struct stat buf;
-        PR_LOG(PR_LOG_DEBUG, "entry");
 
-        CDMi_RESULT cr = UninitializeAppCtx();
-        if (CDMi_SUCCESS != cr)
+        PR_LOG(PR_LOG_DEBUG, "entry isAppCtxInitialized[%d]", m_isAppCtxInitialized);
+        SafeCriticalSection systemLock(drmAppContextMutex_);
+
+        if (m_poAppContext.get() != nullptr && m_isAppCtxInitialized)
         {
-            fprintf(stderr, "[%s:%d] UninitializeAppCtx failed.",__FUNCTION__,__LINE__);
-            PR_LOG(PR_LOG_ERROR, "UninitializeAppCtx failed.");
-            return cr;
+            PR_LOG(PR_LOG_DEBUG, "call CleanLicenseStore...");
+            dr = CleanLicenseStore();
+            if(DRM_FAILED(dr))
+            {
+                PR_LOG(PR_LOG_WARN, "CleanLicenseStore failed. 0x%X - %s",dr,DRM_ERR_NAME(dr));
+            }
         }
 
         cr = CDMi_SUCCESS;
@@ -907,15 +931,16 @@ public:
             }
             else
             {
-                PR_LOG(PR_LOG_ERROR, "Failed to delete key store.");
+                PR_LOG(PR_LOG_ERROR, "Failed to delete key store");
                 cr = CDMi_S_FALSE;
             }
         }
+        else
+            cr = CDMi_SUCCESS;
 
         PR_LOG(PR_LOG_DEBUG, "exit cr[0x%X]", cr);
         return cr;
     }
-
 
     CDMi_RESULT GetKeyStoreHash(
             uint8_t keyStoreHash[],
