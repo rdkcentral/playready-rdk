@@ -301,8 +301,6 @@ CDMi_RESULT MediaKeySession::StoreLicenseData(const uint8_t f_rgbLicenseData[], 
         PR_LOG(PR_LOG_WARN, "f_pSecureStopId is null");
     }
 
-    memset( f_pSecureStopId, 0, DRM_ID_SIZE );
-
     KeyId tmpBatchKeyId(&m_oBatchID.rgb[0],KeyId::KEYID_ORDER_GUID_LE);
 
     if ( tmpBatchKeyId == KeyId::EmptyKeyId ){
@@ -370,6 +368,7 @@ CDMi_RESULT MediaKeySession::StoreLicenseData(const uint8_t f_rgbLicenseData[], 
     }
 
     if(f_pSecureStopId != NULL) {
+        memset( f_pSecureStopId, 0, DRM_ID_SIZE );
         ::memcpy( f_pSecureStopId, &m_oBatchID.rgb[ 0 ], DRM_ID_SIZE );
     }
 
