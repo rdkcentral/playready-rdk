@@ -46,6 +46,24 @@ namespace CDMi {
 std::map<KeyId, DECRYPT_CONTEXT> mBindMap;
 static const DRM_CONST_STRING* RIGHTS[] = { &PLAY_RIGHT };
 
+static std::string convertToBase64(const std::vector<uint8_t>& data) {
+    static const char lookup[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    out.reserve(((data.size() + 2) / 3) * 4);
+    int val = 0, valb = -6;
+    for (uint8_t c : data) {
+        val = (val << 8) + c;
+        valb += 8;
+        while (valb >= 0) {
+            out.push_back(lookup[(val >> valb) & 0x3F]);
+            valb -= 6;
+        }
+    }
+    if (valb > -6) out.push_back(lookup[((val << (8 - (valb + 8))) >> 2) & 0x3F]);
+    while (out.size() % 4) out.push_back('=');
+    return out;
+}
+
 MediaKeySession::MediaKeySession(const uint8_t drmHeader[], uint32_t drmHeaderLength, DRM_APP_CONTEXT * poAppContext, bool initiateChallengeGeneration /* = false */)
    : m_pbRevocationBuffer(nullptr)
    , m_eKeyState(KEY_CLOSED)
@@ -71,6 +89,8 @@ MediaKeySession::MediaKeySession(const uint8_t drmHeader[], uint32_t drmHeaderLe
 {
     ZEROMEM(m_rgchSessionID, SIZEOF(m_rgchSessionID));
 
+    PR_LOG(PR_LOG_DEBUG, "entry");
+
 #ifdef USE_SVP
     gst_svp_ext_get_context(&m_pSVPContext, Client, m_rpcID);
     m_stSecureBuffInfo.bCreateSecureMemRegion = true;
@@ -82,22 +102,44 @@ MediaKeySession::MediaKeySession(const uint8_t drmHeader[], uint32_t drmHeaderLe
     }
 #endif
 
+    mDrmHeader.clear();
     mDrmHeader.resize(drmHeaderLength);
-    memcpy(&mDrmHeader[0], drmHeader, drmHeaderLength);
+
+    if(drmHeaderLength) {
+        memcpy(&mDrmHeader[0], drmHeader, drmHeaderLength);
+        std::string base64Header = convertToBase64(mDrmHeader); 
+        PR_LOG(PR_LOG_TRACE, "DRM Header size[%u] (String):[%s]",mDrmHeader.size(), base64Header.c_str());
+    } else {
+        PR_LOG(PR_LOG_DEBUG, "drmHeaderLength is zero");
+    }
 
     m_eKeyState = KEY_INIT;
+    PR_LOG(PR_LOG_DEBUG, "exit");
 }
 
 uint32_t MediaKeySession::GetSessionIdExt() const
 {
+    PR_LOG(PR_LOG_DEBUG, "Get mSessionId[%d]", mSessionId);
     return mSessionId;
 }
 
 CDMi_RESULT MediaKeySession::SetDrmHeader(const uint8_t drmHeader[], uint32_t drmHeaderLength)
 {
+    PR_LOG(PR_LOG_DEBUG, "entry");
     SafeCriticalSection systemLock(drmAppContextMutex_);
+
+    mDrmHeader.clear();
     mDrmHeader.resize(drmHeaderLength);
-    memcpy(&mDrmHeader[0], drmHeader, drmHeaderLength);
+
+    if(drmHeaderLength) {
+        memcpy(&mDrmHeader[0], drmHeader, drmHeaderLength);
+        std::string base64Header = convertToBase64(mDrmHeader);
+        PR_LOG(PR_LOG_TRACE, "DRM Header size[%u] (String):[%s]",mDrmHeader.size(), base64Header.c_str());
+    } else {
+        PR_LOG(PR_LOG_DEBUG, "drmHeaderLength is zero");
+    }
+
+    PR_LOG(PR_LOG_DEBUG, "exit");
     return CDMi_SUCCESS;
 }
 
@@ -110,8 +152,11 @@ CDMi_RESULT MediaKeySession::BindKeyNow(DECRYPT_CONTEXT decryptContext)
     CDMi_RESULT result = CDMi_SUCCESS;
     DRM_RESULT dr;
 
+    PR_LOG(PR_LOG_DEBUG, "entry");
+
     for(;;)
     {
+
         if ( CDMi_SUCCESS != SetKeyIdProperty( decryptContext->keyId ) )
         {
             result = CDMi_S_FALSE;
@@ -125,7 +170,7 @@ CDMi_RESULT MediaKeySession::BindKeyNow(DECRYPT_CONTEXT decryptContext)
                                 (const DRM_BYTE*)&decryptionMode,
                                 sizeof decryptionMode);
         if (!DRM_SUCCEEDED(dr)) {
-            fprintf(stderr, "[%s:%d] Drm_Content_SetProperty() failed with %lx - %s",__FUNCTION__,__LINE__,dr,DRM_ERR_NAME(dr));
+            PR_LOG(PR_LOG_ERROR, "Drm_Content_SetProperty failed. 0x%X - %s",dr,DRM_ERR_NAME(dr));
             result = CDMi_S_FALSE;
             break;
         }
@@ -139,7 +184,7 @@ CDMi_RESULT MediaKeySession::BindKeyNow(DECRYPT_CONTEXT decryptContext)
 
         if (DRM_FAILED(dr))
         {
-            fprintf(stderr, "[%s:%d] ReaderBind failed. 0x%X - %s",__FUNCTION__,__LINE__,dr,DRM_ERR_NAME(dr));
+            PR_LOG(PR_LOG_ERROR, "ReaderBind failed. 0x%X - %s",dr,DRM_ERR_NAME(dr));
             result = CDMi_S_FALSE;
             break;
         }
@@ -147,12 +192,13 @@ CDMi_RESULT MediaKeySession::BindKeyNow(DECRYPT_CONTEXT decryptContext)
         dr = Drm_Reader_Commit(m_poAppContext, _PolicyCallback, pvData);
         if (DRM_FAILED(dr))
         {
-            fprintf(stderr, "[%s:%d] Drm_Reader_Commit failed. 0x%X - %s",__FUNCTION__,__LINE__,dr,DRM_ERR_NAME(dr));
+            PR_LOG(PR_LOG_ERROR, "Drm_Reader_Commit failed. 0x%X - %s",dr,DRM_ERR_NAME(dr));
             result = CDMi_S_FALSE;
             break;
         }
 
         bIsAudioNeedNonSVPContext = svpIsAudioNeedNonSVPContext();
+        PR_LOG(PR_LOG_TRACE, "bIsAudioNeedNonSVPContext[%d]", bIsAudioNeedNonSVPContext);
 
         if(bIsAudioNeedNonSVPContext)
         {
@@ -162,9 +208,9 @@ CDMi_RESULT MediaKeySession::BindKeyNow(DECRYPT_CONTEXT decryptContext)
                                     (const DRM_BYTE*)&decryptionMode,
                                     sizeof decryptionMode);
             if (!DRM_SUCCEEDED(dr)) {
-                fprintf(stderr, "[%s:%d] Drm_Content_SetProperty() failed with %lx - %s",__FUNCTION__,__LINE__,dr,DRM_ERR_NAME(dr));
-            result = CDMi_S_FALSE;
-            break;
+                PR_LOG(PR_LOG_ERROR, "Drm_Content_SetProperty failed. 0x%X - %s",dr,DRM_ERR_NAME(dr));
+                result = CDMi_S_FALSE;
+                break;
             }
 
             dr = ReaderBind(
@@ -176,15 +222,15 @@ CDMi_RESULT MediaKeySession::BindKeyNow(DECRYPT_CONTEXT decryptContext)
 
             if (DRM_FAILED(dr))
             {
-            fprintf(stderr, "[%s:%d] ReaderBind failed. 0x%X - %s",__FUNCTION__,__LINE__,dr,DRM_ERR_NAME(dr));
-            result = CDMi_S_FALSE;
-            break;
+                PR_LOG(PR_LOG_ERROR, "ReaderBind failed. 0x%X - %s",dr,DRM_ERR_NAME(dr));
+                result = CDMi_S_FALSE;
+                break;
             }
 
             dr = Drm_Reader_Commit(m_poAppContext, _PolicyCallback, pvData);
             if (DRM_FAILED(dr))
             {
-                fprintf(stderr, "[%s:%d] Drm_Reader_Commit failed. 0x%X - %s",__FUNCTION__,__LINE__,dr,DRM_ERR_NAME(dr));
+                PR_LOG(PR_LOG_ERROR, "Drm_Reader_Commit failed. 0x%X - %s",dr,DRM_ERR_NAME(dr));
                 result = CDMi_S_FALSE;
                 break;
             }
@@ -192,11 +238,12 @@ CDMi_RESULT MediaKeySession::BindKeyNow(DECRYPT_CONTEXT decryptContext)
 
         if ( nullptr == ( tmpDecryptContext = GetDecryptCtx( decryptContext->keyId ) ) ){
             m_DecryptContextVector.push_back(decryptContext);
+            PR_LOG(PR_LOG_DEBUG, "decryptContext updated successfully keyId[%s]", printGuid( decryptContext->keyId));
         }
-
         break;
     }
 
+    PR_LOG(PR_LOG_DEBUG, "exit result:%u", result);
     return result;
 }
 
@@ -204,6 +251,9 @@ CDMi_RESULT MediaKeySession::BindKey(KeyId keyId)
 {
     DECRYPT_CONTEXT decryptContext;
     CDMi_RESULT result = CDMi_SUCCESS;
+
+    PR_LOG(PR_LOG_DEBUG, "entry");
+
     decryptContext = NEW_DECRYPT_CONTEXT();
     decryptContext->keyId = keyId;
     
@@ -227,6 +277,7 @@ CDMi_RESULT MediaKeySession::BindKey(KeyId keyId)
         break;
     }
 
+    PR_LOG(PR_LOG_DEBUG, "exit result:0x%X", result);
     return result;
 }
 
@@ -236,12 +287,18 @@ CDMi_RESULT MediaKeySession::StoreLicenseData(const uint8_t f_rgbLicenseData[], 
     DRM_LICENSE_RESPONSE oLicenseResponse = {eUnknownProtocol, 0};
     DRM_LICENSE_ACK *pLicenseAck = nullptr;
 
+    PR_LOG(PR_LOG_DEBUG, "entry");
+
     SafeCriticalSection systemLock(drmAppContextMutex_);
 
     if ( f_cbLicenseDataSize == 0 )
     {
-        fprintf(stderr, "[%s:%d] f_cbLicenseDataSize should not be 0",__FUNCTION__,__LINE__);
-        return CDMi_S_FALSE;
+        PR_LOG(PR_LOG_ERROR, "f_cbLicenseDataSize is zero");
+        return CDMi_INVALID_ARG;
+    }
+
+    if(f_pSecureStopId == NULL) {
+        PR_LOG(PR_LOG_WARN, "f_pSecureStopId is null");
     }
 
     memset( f_pSecureStopId, 0, DRM_ID_SIZE );
@@ -249,7 +306,7 @@ CDMi_RESULT MediaKeySession::StoreLicenseData(const uint8_t f_rgbLicenseData[], 
     KeyId tmpBatchKeyId(&m_oBatchID.rgb[0],KeyId::KEYID_ORDER_GUID_LE);
 
     if ( tmpBatchKeyId == KeyId::EmptyKeyId ){
-        fprintf(stderr, "[%s:%d] Invalid batchId/SecureStopId: %s",__FUNCTION__,__LINE__,tmpBatchKeyId.B64Str());
+        PR_LOG(PR_LOG_ERROR, "Invalid batchId/SecureStopId: %s",tmpBatchKeyId.B64Str());
         return CDMi_S_FALSE;
     }
 
@@ -263,7 +320,7 @@ CDMi_RESULT MediaKeySession::StoreLicenseData(const uint8_t f_rgbLicenseData[], 
 
     if (DRM_FAILED(err)) {
         SAFE_OEM_FREE( oLicenseResponse.m_pAcks );
-        fprintf(stderr, "[%s:%d] ProcessLicenseResponse failed. 0x%X - %s",__FUNCTION__,__LINE__,err,DRM_ERR_NAME(err));
+        PR_LOG(PR_LOG_ERROR, "ProcessLicenseResponse failed. 0x%X - %s",err,DRM_ERR_NAME(err));
         return CDMi_S_FALSE;
     }
 
@@ -275,7 +332,7 @@ CDMi_RESULT MediaKeySession::StoreLicenseData(const uint8_t f_rgbLicenseData[], 
     if ( ::memcmp( m_oBatchID.rgb, &oLicenseResponse.m_idSession.rgb[0], DRM_ID_SIZE ) != 0 )
     {
         KeyId mBatch(&m_oBatchID.rgb[0],KeyId::KEYID_ORDER_GUID_LE);
-        fprintf(stderr, "[%s:%d] Response batchID does not equal batchID %s from challenge.",__FUNCTION__,__LINE__,mBatch.B64Str());
+        PR_LOG(PR_LOG_ERROR, "Response batchID does not equal batchID %s from challenge.",mBatch.B64Str());
         SAFE_OEM_FREE( oLicenseResponse.m_pAcks );
         return CDMi_S_FALSE;
     }
@@ -292,25 +349,33 @@ CDMi_RESULT MediaKeySession::StoreLicenseData(const uint8_t f_rgbLicenseData[], 
             if ( m_piCallback != nullptr ){
                 if (CDMi_SUCCESS != BindKey(keyId))
                 {
-                  fprintf(stderr, "[%s:%d] BindKey() failed for keyId %s",__FUNCTION__,__LINE__,printGuid(keyId));
+                    PR_LOG(PR_LOG_DEBUG, "BindKey() failed for keyId %s",printGuid(keyId));
                 }
-                if ( keyId.getKeyIdOrder() == KeyId::KEYID_ORDER_GUID_LE )
-                  keyId.ToggleFormat();
+                if ( keyId.getKeyIdOrder() == KeyId::KEYID_ORDER_GUID_LE ) {
+                    keyId.ToggleFormat();
+                }
+
                 m_piCallback->OnKeyStatusUpdate("KeyUsable", (const uint8_t *)keyId.getmBytes(), DRM_ID_SIZE);
+                PR_LOG(PR_LOG_DEBUG, "Notified the Key status update as KeyUsable");
             }
         }
         else
         {
-            fprintf(stderr, "[%s:%d] Error processing license %s, 0x%X - %s",__FUNCTION__,__LINE__,printGuid(keyId),dr,DRM_ERR_NAME(dr));
+            PR_LOG(PR_LOG_ERROR, "Error processing license %s, 0x%X - %s",printGuid(keyId),dr,DRM_ERR_NAME(dr));
         }
     }
-    if ( m_piCallback != nullptr )
-        m_piCallback->OnKeyStatusesUpdated();
 
-    ::memcpy( f_pSecureStopId, &m_oBatchID.rgb[ 0 ], DRM_ID_SIZE );
+    if ( m_piCallback != nullptr ) {
+        m_piCallback->OnKeyStatusesUpdated();
+    }
+
+    if(f_pSecureStopId != NULL) {
+        ::memcpy( f_pSecureStopId, &m_oBatchID.rgb[ 0 ], DRM_ID_SIZE );
+    }
 
     SAFE_OEM_FREE( oLicenseResponse.m_pAcks );
 
+    PR_LOG(PR_LOG_DEBUG, "success");
     return CDMi_SUCCESS;
 }
 
@@ -324,14 +389,16 @@ CDMi_RESULT MediaKeySession::SelectKeyId( const uint8_t f_keyLength, const uint8
     CDMi_RESULT result = CDMi_SUCCESS;
     bool bIsAudioNeedNonSVPContext;
 
+    PR_LOG(PR_LOG_DEBUG, "entry");
+
     pfnOPLCallback = _PolicyCallback;
 
     for (;;)
     {
         if ( f_keyId == nullptr || f_keyLength != DRM_ID_SIZE )
         {
-            fprintf(stderr, "[%s:%d] Bad value for keyId arg ",__FUNCTION__,__LINE__);
-            result = CDMi_S_FALSE;
+            PR_LOG(PR_LOG_ERROR, "Bad value for keyId arg");
+            result = CDMi_INVALID_ARG;
             break;
         }
 
@@ -340,13 +407,14 @@ CDMi_RESULT MediaKeySession::SelectKeyId( const uint8_t f_keyLength, const uint8
 
         /* If decrypt context exists, no need to create the new one */
         if ( nullptr != ( m_currentDecryptContext = GetDecryptCtx( keyId ) ) ){
+            PR_LOG(PR_LOG_DEBUG, "Decrypt contex found for the keyid");
             result = CDMi_SUCCESS;
             break;
         }
 
         if ( CDMi_SUCCESS != SetKeyIdProperty( keyId ) )
         {
-            fprintf(stderr, "[%s:%d] SetKeyIdProperty failed",__FUNCTION__,__LINE__);
+            PR_LOG(PR_LOG_ERROR, "SetKeyIdProperty failed");
             result = CDMi_S_FALSE;
             break;
         }
@@ -359,7 +427,7 @@ CDMi_RESULT MediaKeySession::SelectKeyId( const uint8_t f_keyLength, const uint8
                                 (const DRM_BYTE*)&decryptionMode,
                                 sizeof decryptionMode);
         if (!DRM_SUCCEEDED(err)) {
-            fprintf(stderr, "[%s:%d] Drm_Content_SetProperty() failed with %lx - %s",__FUNCTION__,__LINE__,err,DRM_ERR_NAME(err));
+            PR_LOG(PR_LOG_ERROR, "Drm_Content_SetProperty failed. 0x%X - %s",err,DRM_ERR_NAME(err));
             result = CDMi_S_FALSE;
             break;
         }
@@ -373,7 +441,7 @@ CDMi_RESULT MediaKeySession::SelectKeyId( const uint8_t f_keyLength, const uint8
 
         if (DRM_FAILED(err))
         {
-            fprintf(stderr, "[%s:%d] ReaderBind failed. 0x%X - %s",__FUNCTION__,__LINE__,err,DRM_ERR_NAME(err));
+            PR_LOG(PR_LOG_ERROR, "ReaderBind failed. 0x%X - %s",err,DRM_ERR_NAME(err));
             result = CDMi_S_FALSE;
             break;
         } 
@@ -381,7 +449,7 @@ CDMi_RESULT MediaKeySession::SelectKeyId( const uint8_t f_keyLength, const uint8
         err = Drm_Reader_Commit(m_poAppContext, pfnOPLCallback, pvData);
         if (DRM_FAILED(err))
         {
-            fprintf(stderr, "[%s:%d] Drm_Reader_Commit failed. 0x%X - %s",__FUNCTION__,__LINE__,err,DRM_ERR_NAME(err));
+            PR_LOG(PR_LOG_ERROR, "Drm_Reader_Commit failed. 0x%X - %s",err,DRM_ERR_NAME(err));
             result = CDMi_S_FALSE;
             break;
         }
@@ -396,7 +464,7 @@ CDMi_RESULT MediaKeySession::SelectKeyId( const uint8_t f_keyLength, const uint8
                                     (const DRM_BYTE*)&decryptionMode,
                                     sizeof decryptionMode);
             if (!DRM_SUCCEEDED(err)) {
-                fprintf(stderr, "[%s:%d] Drm_Content_SetProperty() failed with %lx - %s",__FUNCTION__,__LINE__,err,DRM_ERR_NAME(err));
+                PR_LOG(PR_LOG_ERROR, "Drm_Content_SetProperty failed. 0x%X - %s",err,DRM_ERR_NAME(err));
                 result = CDMi_S_FALSE;
                 break;
             }
@@ -410,7 +478,7 @@ CDMi_RESULT MediaKeySession::SelectKeyId( const uint8_t f_keyLength, const uint8
 
             if (DRM_FAILED(err))
             {
-                fprintf(stderr, "[%s:%d] ReaderBind failed. 0x%X - %s",__FUNCTION__,__LINE__,err,DRM_ERR_NAME(err));
+                PR_LOG(PR_LOG_ERROR, "ReaderBind failed. 0x%X - %s",err,DRM_ERR_NAME(err));
                 result = CDMi_S_FALSE;
                 break;
             }
@@ -418,7 +486,7 @@ CDMi_RESULT MediaKeySession::SelectKeyId( const uint8_t f_keyLength, const uint8
             err = Drm_Reader_Commit(m_poAppContext, pfnOPLCallback, pvData);
             if (DRM_FAILED(err))
             {
-                fprintf(stderr, "[%s:%d] Drm_Reader_Commit failed. 0x%X - %s",__FUNCTION__,__LINE__,err,DRM_ERR_NAME(err));
+                PR_LOG(PR_LOG_ERROR, "Drm_Reader_Commit failed. 0x%X - %s",err,DRM_ERR_NAME(err));
                 result = CDMi_S_FALSE;
                 break;
             }
@@ -433,6 +501,7 @@ CDMi_RESULT MediaKeySession::SelectKeyId( const uint8_t f_keyLength, const uint8
         break;
     }
 
+    PR_LOG(PR_LOG_DEBUG, "exit result:0x%X", result);
     return result;
 }
 
@@ -442,15 +511,19 @@ CDMi_RESULT MediaKeySession::GetChallengeDataExt(uint8_t * f_pChallenge, uint32_
     DRM_CHAR *pchCustomData = nullptr;
     DRM_DWORD cchCustomData = 0;
 
+    PR_LOG(PR_LOG_DEBUG, "entry");
     UNREFERENCED_PARAMETER( f_isLDL );
 
     SafeCriticalSection systemLock(drmAppContextMutex_);
 
     if (mDrmHeader.size() == 0)
     {
-        fprintf(stderr, "[%s:%d] No valid DRM header",__FUNCTION__,__LINE__);
+        PR_LOG(PR_LOG_ERROR, "No valid DRM header");
         return CDMi_S_FALSE;
     }
+
+    std::string base64Header = convertToBase64(mDrmHeader);
+    PR_LOG(PR_LOG_TRACE, "DRM Header size[%u] (String):[%s]",mDrmHeader.size(), base64Header.c_str());
 
     ASSERT(m_poAppContext != nullptr);
 
@@ -460,14 +533,20 @@ CDMi_RESULT MediaKeySession::GetChallengeDataExt(uint8_t * f_pChallenge, uint32_
                                   mDrmHeader.size());
     if (DRM_FAILED(err))
     {
-        fprintf(stderr, "[%s:%d] Drm_Content_SetProperty failed. 0x%X - %s",__FUNCTION__,__LINE__,err,DRM_ERR_NAME(err));
+        PR_LOG(PR_LOG_ERROR, "Drm_Content_SetProperty failed. 0x%X - %s",err,DRM_ERR_NAME(err));
         return CDMi_S_FALSE;
+    }
+
+    if(f_pChallenge == NULL) {
+        PR_LOG(PR_LOG_WARN, "Input challenge buffer is null, need to return the required challengesize");
     }
 
     DRM_BYTE* pbPassedChallenge = static_cast<DRM_BYTE*>(f_pChallenge);
     if (f_ChallengeSize == 0) {
+        PR_LOG(PR_LOG_WARN, "Input ChallengeSize is zero");
         pbPassedChallenge = nullptr;
     }
+
 
     err = Drm_LicenseAcq_GenerateChallenge(m_poAppContext,
                                            RIGHTS,
@@ -487,59 +566,75 @@ CDMi_RESULT MediaKeySession::GetChallengeDataExt(uint8_t * f_pChallenge, uint32_
     if ( DRM_FAILED( err ) )
     {
         if (err == DRM_E_BUFFERTOOSMALL) {
-            return CDMi_OUT_OF_MEMORY ;   
+            PR_LOG(PR_LOG_WARN, "challenge buffer is small, required size is %u", f_ChallengeSize);
+            return CDMi_OUT_OF_MEMORY;
         }
         else
         {
-            fprintf(stderr, "[%s:%d] Drm_LicenseAcq_GenerateChallenge failed. 0x%X - %s",__FUNCTION__,__LINE__,err,DRM_ERR_NAME(err));
+            PR_LOG(PR_LOG_ERROR, "Drm_LicenseAcq_GenerateChallenge failed. 0x%X - %s",err,DRM_ERR_NAME(err));
             return CDMi_S_FALSE;
         }
     }
 
     m_eKeyState = KEY_PENDING;
 
+    PR_LOG(PR_LOG_DEBUG, "exit");
+
     return CDMi_SUCCESS;
 }
 
 CDMi_RESULT MediaKeySession::CancelChallengeDataExt()
 {
+    PR_LOG(PR_LOG_DEBUG, "Not implemented ");
     return CDMi_S_FALSE;
 }
 
 CDMi_RESULT MediaKeySession::Unbind(KeyId keyId)
 {
-      auto it = mBindMap.find(keyId);
-      if (it == mBindMap.end())
-      {
-          fprintf(stderr, "[%s:%d] failed to find binding lock with key ID",__FUNCTION__,__LINE__);
-          return CDMi_S_FALSE;
-      }
+    auto it = mBindMap.find(keyId);
+ 
+    PR_LOG(PR_LOG_DEBUG, "entry");
+    PR_LOG(PR_LOG_TRACE, "keyid[%s]", printGuid(keyId));
+    
+    if (it == mBindMap.end())
+    {
+        PR_LOG(PR_LOG_ERROR, "failed to find binding lock with key ID");
+        return CDMi_S_FALSE;
+    }
 
-      if (it->second.get() == nullptr)
-      {
-              mBindMap.erase(it);
-              return CDMi_SUCCESS;
-      }
+    if (it->second.get() == nullptr)
+    {
+        mBindMap.erase(it);
+        return CDMi_SUCCESS;
+    }
 
-      if (it->second->keyId != keyId)
-      {
-              ASSERT(it->second->keyId == keyId);
-              return CDMi_S_FALSE;
-      }
-      BindKeyNow(it->second);
-      it->second.reset();
-      mBindMap.erase(it);
-      return CDMi_SUCCESS;
+    if (it->second->keyId != keyId)
+    {
+        ASSERT(it->second->keyId == keyId);
+
+        PR_LOG(PR_LOG_ERROR, "keyId does not match map key");
+        return CDMi_S_FALSE;
+    }
+
+    BindKeyNow(it->second);
+    it->second.reset();
+    mBindMap.erase(it);
+
+    PR_LOG(PR_LOG_DEBUG, "exit");
+    return CDMi_SUCCESS;
 }
 
 CDMi_RESULT MediaKeySession::CleanDecryptContext()
 {
     SafeCriticalSection systemLock(drmAppContextMutex_);
 
+    PR_LOG(PR_LOG_DEBUG, "entry");
+
     ASSERT(m_poAppContext != nullptr);
 
     for (DECRYPT_CONTEXT &ctx : m_DecryptContextVector)
     {
+        PR_LOG(PR_LOG_DEBUG, "unbind keyIds from Decrypt context");
         Unbind(ctx->keyId);
     }
 
@@ -550,12 +645,13 @@ CDMi_RESULT MediaKeySession::CleanDecryptContext()
         DRM_RESULT err = Drm_Reader_Commit(m_poAppContext, nullptr, nullptr);
         if (DRM_FAILED(err))
         {
-            fprintf(stderr, "[%s:%d] Drm_Reader_Commit failed. 0x%X - %s",__FUNCTION__,__LINE__,static_cast<unsigned long>(err),DRM_ERR_NAME(err));
+            PR_LOG(PR_LOG_DEBUG, "Drm_Reader_Commit failed. 0x%X - %s",err,DRM_ERR_NAME(err));
         }
     }
 
     m_fCommit = FALSE;
     m_decryptInited = false;
+    PR_LOG(PR_LOG_DEBUG, "exit");
     return CDMi_SUCCESS;
 }
 }

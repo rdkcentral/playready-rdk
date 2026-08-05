@@ -70,6 +70,39 @@
 #define DRM_ERR_NAME( dr ) #dr
 #endif
 
+typedef enum
+{
+    PR_LOG_ERROR = 0,
+    PR_LOG_WARN  = 1,
+    PR_LOG_INFO  = 2,
+    PR_LOG_DEBUG = 3,
+    PR_LOG_TRACE = 4
+}PRLogLevel;
+
+extern uint32_t g_logLevel;
+
+static const char* const LogLevelName[] =
+{
+    "ERROR",
+    "WARN",
+    "INFO",
+    "DEBUG",
+    "TRACE"
+};
+
+#define PR_LOG(level, fmt, ...)                                                \
+    do {                                                                       \
+        if ((level) <= g_logLevel)                                             \
+        {                                                                      \
+            fprintf(stderr,                                                    \
+                    "[PlayReady][%s][%s:%d] " fmt "\n",                        \
+                    LogLevelName[level],                                       \
+                    __FUNCTION__,                                              \
+                    __LINE__,                                                  \
+                    ##__VA_ARGS__);                                            \
+        }                                                                      \
+    } while (0)
+
 #define DRM_E_TEE_OUTPUT_PROTECTION_INSUFFICIENT_HDCP ((DRM_RESULT)0x8004dc80)
 #define DRM_E_TEE_OUTPUT_PROTECTION_INSUFFICIENT_HDCP22 ((DRM_RESULT)0x8004dc81)
 typedef struct
