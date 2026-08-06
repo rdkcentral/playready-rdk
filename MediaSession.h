@@ -312,6 +312,7 @@ public:
         uint8_t**                outData,
         uint32_t*                outDataLength,
         const SampleInfo*        sampleInfo,
+        const uint16_t           sampleCount,
         const IStreamProperties* properties);
 
     virtual CDMi_RESULT ReleaseClearContent(
