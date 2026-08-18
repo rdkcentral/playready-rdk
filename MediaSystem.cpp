@@ -189,8 +189,6 @@ public:
         DRM_RESULT rnd = DRM_S_FALSE;
         PR_LOG(PR_LOG_DEBUG, "entry");
 
-        bool isNetflixPlayready = (strstr(keySystem.c_str(), "netflix") != nullptr);
-
         SafeCriticalSection systemLock(drmAppContextMutex_);
 
         if (!m_isAppCtxInitialized) {
@@ -203,11 +201,7 @@ public:
             return CDMi_FAIL;
         }
 
-        if (isNetflixPlayready) {
-            *f_ppiMediaKeySession = new CDMi::MediaKeySession(f_pbInitData, f_cbInitData, m_poAppContext.get(), !isNetflixPlayready);
-        } else {
-            *f_ppiMediaKeySession = new CDMi::MediaKeySession(f_pbInitData, f_cbInitData, f_pbCDMData, f_cbCDMData, m_poAppContext.get(), !isNetflixPlayready);
-        }
+        *f_ppiMediaKeySession = new CDMi::MediaKeySession(f_pbInitData, f_cbInitData, f_pbCDMData, f_cbCDMData, m_poAppContext.get());
 
         /* Store the MediaKeySession with random generated SessionId */
         do {
@@ -373,8 +367,7 @@ public:
             IMediaKeySessionExt** session) /* override */
     {
         DRM_RESULT rnd = DRM_S_FALSE;
-        bool isNetflixPlayready = (strstr(keySystem.c_str(), "netflix") != nullptr);
-        PR_LOG(PR_LOG_DEBUG, "entry isNetflixPlayready[%d] m_sessionCount[%d]", isNetflixPlayready, m_sessionCount);
+        PR_LOG(PR_LOG_DEBUG, "entry m_sessionCount[%d]", m_sessionCount);
 
         SafeCriticalSection systemLock(drmAppContextMutex_);
 
@@ -393,7 +386,7 @@ public:
             return CDMi_FAIL;
         }
 
-        *session = new CDMi::MediaKeySession(drmHeader, drmHeaderLength, m_poAppContext.get(), !isNetflixPlayready);
+        *session = new CDMi::MediaKeySession(drmHeader, drmHeaderLength, nullptr, 0, m_poAppContext.get());
 
         /* Store the MediaKeySession with random generated SessionId */
         do {
