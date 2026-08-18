@@ -108,7 +108,7 @@ MediaKeySession::MediaKeySession(const uint8_t drmHeader[], uint32_t drmHeaderLe
     if(drmHeaderLength) {
         memcpy(&mDrmHeader[0], drmHeader, drmHeaderLength);
         std::string base64Header = convertToBase64(mDrmHeader); 
-        PR_LOG(PR_LOG_TRACE, "DRM Header size[%u] (String):[%s]",mDrmHeader.size(), base64Header.c_str());
+        PR_LOG(PR_LOG_TRACE, "DRM Header size[%zu] (String):[%s]",mDrmHeader.size(), base64Header.c_str());
     } else {
         PR_LOG(PR_LOG_DEBUG, "drmHeaderLength is zero");
     }
@@ -134,7 +134,7 @@ CDMi_RESULT MediaKeySession::SetDrmHeader(const uint8_t drmHeader[], uint32_t dr
     if(drmHeaderLength) {
         memcpy(&mDrmHeader[0], drmHeader, drmHeaderLength);
         std::string base64Header = convertToBase64(mDrmHeader);
-        PR_LOG(PR_LOG_TRACE, "DRM Header size[%u] (String):[%s]",mDrmHeader.size(), base64Header.c_str());
+        PR_LOG(PR_LOG_TRACE, "DRM Header size[%zu] (String):[%s]",mDrmHeader.size(), base64Header.c_str());
     } else {
         PR_LOG(PR_LOG_DEBUG, "drmHeaderLength is zero");
     }

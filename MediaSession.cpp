@@ -299,7 +299,7 @@ PlayreadyInitDataType parsePlayreadyInitializationData(const std::string& initDa
             }
 
             prInitDataType = PlayreadyInitDataType::PR_INIT_DATA_DRM_HEADER;
-            PR_LOG(PR_LOG_DEBUG, "INIT_DATA_DRM_HEADER found initData.length[%d]", initData.length());
+            PR_LOG(PR_LOG_DEBUG, "INIT_DATA_DRM_HEADER found initData.length[%zu]", initData.length());
             break;
         }
 
@@ -628,7 +628,7 @@ MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitD
                     playreadyInitData.size() );
 
             std::string base64Header = convertToBase64(mDrmHeader);
-            PR_LOG(PR_LOG_TRACE, "DRM Header size[%u] (String):[%s]",mDrmHeader.size(), base64Header.c_str());
+            PR_LOG(PR_LOG_TRACE, "DRM Header size[%zu] (String):[%s]",mDrmHeader.size(), base64Header.c_str());
 
             ChkDR(Drm_Content_SetProperty(m_poAppContext,
                             DRM_CSP_AUTODETECT_HEADER,
@@ -1901,7 +1901,7 @@ CDMi_RESULT MediaKeySession::Decrypt(
         memcpy((void *)(uint8_t*)pEncryptedDataStart, pDecryptedContent, decryptedLength);
         free(pDecryptedContent);
         pDecryptedContent = NULL;
-        PR_LOG(PR_LOG_TRACE, "InPlace data copy success. decryptedLength[%u", decryptedLength);
+        PR_LOG(PR_LOG_TRACE, "InPlace data copy success. decryptedLength[%u]", decryptedLength);
     }
 
   }
