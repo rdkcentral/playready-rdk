@@ -46,7 +46,7 @@ namespace CDMi {
 std::map<KeyId, DECRYPT_CONTEXT> mBindMap;
 static const DRM_CONST_STRING* RIGHTS[] = { &PLAY_RIGHT };
 
-static std::string convertToBase64(const std::vector<uint8_t>& data) {
+std::string convertToBase64(const std::vector<uint8_t>& data) {
     static const char lookup[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     std::string out;
     out.reserve(((data.size() + 2) / 3) * 4);
