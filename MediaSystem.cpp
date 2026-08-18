@@ -190,25 +190,21 @@ public:
 
         PR_LOG(PR_LOG_DEBUG, "entry");
 
-        bool isNetflixPlayready = (strstr(keySystem.c_str(), "netflix") != nullptr);
+        SafeCriticalSection systemLock(drmAppContextMutex_);
+        if (!m_isAppCtxInitialized || m_poAppContext.get() == nullptr)
         {
-            SafeCriticalSection systemLock(drmAppContextMutex_);
-            if (isNetflixPlayready && !m_isAppCtxInitialized)
+            CDMi_RESULT cr = InitializeAppCtx();
+            if (CDMi_SUCCESS != cr)
             {
-                CDMi_RESULT cr = InitializeAppCtx();
-                if (CDMi_SUCCESS != cr)
-                {
-                    PR_LOG(PR_LOG_ERROR, "InitializeAppCtx failed; refusing session creation");
-                    return cr;
-                }
+                PR_LOG(PR_LOG_ERROR, "InitializeAppCtx failed; refusing session creation");
+                return cr;
             }
-            ++m_sessionCount;
         }
-        if (isNetflixPlayready) {
-            *f_ppiMediaKeySession = new CDMi::MediaKeySession(f_pbInitData, f_cbInitData, m_poAppContext.get(), !isNetflixPlayready);
-        } else {
-            *f_ppiMediaKeySession = new CDMi::MediaKeySession(f_pbInitData, f_cbInitData, f_pbCDMData, f_cbCDMData, m_poAppContext.get(), !isNetflixPlayready);
-        }
+
+        *f_ppiMediaKeySession = new CDMi::MediaKeySession(f_pbInitData, f_cbInitData, f_pbCDMData, f_cbCDMData, m_poAppContext.get());
+
+        ++m_sessionCount;
+
         PR_LOG(PR_LOG_DEBUG, "exit");
         return CDMi_SUCCESS;
     }
@@ -318,33 +314,29 @@ public:
             uint32_t drmHeaderLength,
             IMediaKeySessionExt** session) /* override */
     {
-        bool isNetflixPlayready = (strstr(keySystem.c_str(), "netflix") != nullptr);
-        PR_LOG(PR_LOG_DEBUG, "entry isNetflixPlayready[%d] m_sessionCount[%d]", isNetflixPlayready, m_sessionCount);
+        PR_LOG(PR_LOG_DEBUG, "entry m_sessionCount[%d]", m_sessionCount);
 
         if(session == NULL) {
             PR_LOG(PR_LOG_DEBUG, "Invalid input, session is null");
             return CDMi_INVALID_ARG;
         }
 
-        if (isNetflixPlayready) {
-            if (!m_isAppCtxInitialized || m_poAppContext.get() == nullptr) {
-                PR_LOG(PR_LOG_DEBUG, "m_isAppCtxInitialized[%d] and call InitializeAppCtx", m_isAppCtxInitialized);
-                if (CDMi_SUCCESS != InitializeAppCtx())
-                {
-                    PR_LOG(PR_LOG_ERROR, "InitializeAppCtx failed");
-                    return CDMi_S_FALSE;
-                }
-            } else {
-                PR_LOG(PR_LOG_DEBUG, "m_isAppCtxInitialized is valid");
+        SafeCriticalSection systemLock(drmAppContextMutex_);
+
+        if (!m_isAppCtxInitialized || m_poAppContext.get() == nullptr) {
+            PR_LOG(PR_LOG_DEBUG, "m_isAppCtxInitialized[%d] and call InitializeAppCtx", m_isAppCtxInitialized);
+            if (CDMi_SUCCESS != InitializeAppCtx())
+            {
+                PR_LOG(PR_LOG_ERROR, "InitializeAppCtx failed");
+                return CDMi_S_FALSE;
             }
+        } else {
+            PR_LOG(PR_LOG_DEBUG, "m_isAppCtxInitialized is valid");
         }
 
-        {
-            SafeCriticalSection systemLock(drmAppContextMutex_);
-            ++m_sessionCount;
-        }
+        *session = new CDMi::MediaKeySession(drmHeader, drmHeaderLength, nullptr, 0, m_poAppContext.get());
 
-        *session = new CDMi::MediaKeySession(drmHeader, drmHeaderLength, m_poAppContext.get(), !isNetflixPlayready);
+        ++m_sessionCount;
 
         PR_LOG(PR_LOG_DEBUG, "exit");
         return CDMi_SUCCESS;
