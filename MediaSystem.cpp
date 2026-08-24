@@ -28,7 +28,9 @@
 #include <drmint64.h>
 
 #define CLEAN_ON_INIT 1
-uint32_t g_logLevel = PR_LOG_ERROR;
+
+/* Default loglevel is set as DEBUG */
+uint32_t g_logLevel = PR_LOG_DEBUG;
 
 #define DEVICESTORE_DIGEST_BYTES_SIZE OEM_SHA256_DIGEST_SIZE_IN_BYTES
 
@@ -112,9 +114,6 @@ void InitializeLogLevel()
             g_logLevel = static_cast<PRLogLevel>(value);
         }
     }
-
-    // TODO: update by runtime
-    g_logLevel = PR_LOG_DEBUG;
 
     fprintf(stderr,
             "[PlayReady] Set Log Level = %d\n",
