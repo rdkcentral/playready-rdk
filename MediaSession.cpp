@@ -1900,7 +1900,7 @@ CDMi_RESULT MediaKeySession::Decrypt(
 
   if (!m_fCommit) {
     err = Drm_Reader_Commit(m_poAppContext, _PolicyCallback, &m_playreadyLevels);
-    PR_LOG(PR_LOG_ERROR, "Drm_Reader_Commit failed. 0x%X - %s",err,DRM_ERR_NAME(err));
+    PR_LOG(PR_LOG_ERROR, "Drm_Reader_Commit result. 0x%X - %s",err,DRM_ERR_NAME(err));
     m_fCommit = TRUE;
   }
 
