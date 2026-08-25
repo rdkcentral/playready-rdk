@@ -1706,6 +1706,8 @@ CDMi_RESULT MediaKeySession::Decrypt(
 
   bIsVideoResCheckNeed = svpIsVideoResCheckNeed();
 
+  PR_LOG(PR_LOG_TRACE, "IsVideoResCheckNeed[%d]", bIsVideoResCheckNeed);
+
   if(bIsVideoResCheckNeed)
   {
     if (properties->GetMediaType() == Video) {
@@ -1722,6 +1724,9 @@ CDMi_RESULT MediaKeySession::Decrypt(
   }
 
   bIsDynamicSVPEncEnabled = svpIsDynamicSVPEncEnabled();
+
+  PR_LOG(PR_LOG_TRACE, "IsDynamicSVPEncEnabled[%d]", bIsDynamicSVPEncEnabled);
+
   if(bIsDynamicSVPEncEnabled)
   {
     if (properties->GetMediaType() != Video) {
@@ -1976,6 +1981,8 @@ CDMi_RESULT MediaKeySession::Decrypt(
 
     if(NULL != pDecryptedContent)
     {
+        PR_LOG(PR_LOG_TRACE, "decryptedLength[%u] actualEncDataLength[%u] ",decryptedLength, actualEncDataLength);
+
         if ((size_t)decryptedLength > actualEncDataLength) {
             free(pDecryptedContent);
             pDecryptedContent = NULL;
@@ -1999,6 +2006,7 @@ CDMi_RESULT MediaKeySession::Decrypt(
 
   if (!m_fCommit) {
     err = Drm_Reader_Commit(m_poAppContext, _PolicyCallback, &m_playreadyLevels);
+    PR_LOG(PR_LOG_ERROR, "Drm_Reader_Commit result. 0x%X - %s",err,DRM_ERR_NAME(err));
     m_fCommit = TRUE;
   }
 
