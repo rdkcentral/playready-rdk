@@ -1653,21 +1653,6 @@ CDMi_RESULT MediaKeySession::Decrypt(
         }
     }
 
-    for (uint16_t index = 0; index < sampleCount; index++) {
-        if (sampleInfo[index].subSampleCount == 0) {
-            PR_LOG(PR_LOG_ERROR, "Unexpected value of sub sample count for id %d", index);
-            return CDMi_INVALID_ARG;
-        }
-        int prevRegionMapSize = encryptedRegionMapping.size();
-        for (int i = 0; i < sampleInfo[index].subSampleCount; i++) {
-            encryptedRegionMapping.push_back(sampleInfo[index].subSample[i].clear_bytes);
-            encryptedRegionMapping.push_back(sampleInfo[index].subSample[i].encrypted_bytes);
-        }
-        encryptedRegionCounts.push_back(sampleInfo[index].subSampleCount);
-        PR_LOG(PR_LOG_TRACE, "Sample[%d] sub samples: %d, enc region count: %d, enc region map increase by: %d",
-                sampleInfo[index].subSampleCount, encryptedRegionCounts[index], (encryptedRegionMapping.size() - prevRegionMapSize));
-    }
-
     if (gst_svp_has_header(m_pSVPContext, inData)) {
         header = (void*)inData;
         pEncryptedDataStart = reinterpret_cast<DRM_BYTE *>(gst_svp_header_get_start_of_data(m_pSVPContext, header));
@@ -1675,6 +1660,28 @@ CDMi_RESULT MediaKeySession::Decrypt(
     } else {
         pEncryptedDataStart = inData;
         actualEncDataLength = inDataLength;
+    }
+
+    if (sampleCount == 1 && sampleInfo->subSampleCount == 0) {
+        //Special case for single frame decrypt with no subSamples
+        encryptedRegionMapping.push_back(0);
+        encryptedRegionMapping.push_back(actualEncDataLength);
+        encryptedRegionCounts.push_back(1);
+    } else {
+        for (uint16_t index = 0; index < sampleCount; index++) {
+            if (sampleInfo[index].subSampleCount == 0) {
+                PR_LOG(PR_LOG_ERROR, "Unexpected value of sub sample count for id %d", index);
+                return CDMi_INVALID_ARG;
+            }
+            int prevRegionMapSize = encryptedRegionMapping.size();
+            for (int i = 0; i < sampleInfo[index].subSampleCount; i++) {
+                encryptedRegionMapping.push_back(sampleInfo[index].subSample[i].clear_bytes);
+                encryptedRegionMapping.push_back(sampleInfo[index].subSample[i].encrypted_bytes);
+            }
+            encryptedRegionCounts.push_back(sampleInfo[index].subSampleCount);
+            PR_LOG(PR_LOG_TRACE, "Sample[%d] sub samples: %d, enc region count: %d, enc region map increase by: %d",
+                    sampleInfo[index].subSampleCount, encryptedRegionCounts[index], (encryptedRegionMapping.size() - prevRegionMapSize));
+        }
     }
 
     if (useSVP) {
