@@ -1680,7 +1680,7 @@ CDMi_RESULT MediaKeySession::Decrypt(
             }
             encryptedRegionCounts.push_back(sampleInfo[index].subSampleCount);
             PR_LOG(PR_LOG_TRACE, "Sample[%d] sub samples: %d, enc region count: %d, enc region map increase by: %d",
-                    sampleInfo[index].subSampleCount, encryptedRegionCounts[index], (encryptedRegionMapping.size() - prevRegionMapSize));
+                    index, sampleInfo[index].subSampleCount, encryptedRegionCounts[index], (encryptedRegionMapping.size() - prevRegionMapSize));
         }
     }
 
@@ -1769,7 +1769,7 @@ CDMi_RESULT MediaKeySession::Decrypt(
 
         PR_LOG(PR_LOG_TRACE, "Decrypt multiple supported: [%u], audio needs non SVP context: [%u], use SVP: [%u]", bIsMultipleOpaqueSupportCTR, bIsAudioNeedNonSVPContext, useSVP);
 
-        if(sampleInfo[0].scheme == AesCbc_Cbc1 || sampleInfo[0].scheme == AesCbc_Cbcs || bIsMultipleOpaqueSupportCTR) {
+        if(bIsMultipleOpaqueSupportCTR) {
             err = Drm_Reader_DecryptMultipleOpaque(decCtxToUse,
                             ivsHigh.size(),
                             ivsHigh.data(),
