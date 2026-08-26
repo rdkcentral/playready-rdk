@@ -441,100 +441,12 @@ PlayreadySession::PlayreadySession()
     , m_cbPROpaqueBuf(0)
     , m_bInitCalled(false)
 {
-    void *pPlatformInitData = NULL;
-    DRM_RESULT dr = DRM_SUCCESS;
-
-    PR_LOG(PR_LOG_DEBUG, "entry");
-
-    svpGetDrmPlatformInitData( &pPlatformInitData);
-
-    dr = CPRDrmPlatform::DrmPlatformInitialize(pPlatformInitData);
-
-    if (DRM_FAILED( dr )) {
-        PR_LOG(PR_LOG_ERROR, "failed. 0x%X - %s",dr,DRM_ERR_NAME(dr));
-    } else {
-        PR_LOG(PR_LOG_DEBUG, "exit success");
-    }
+    PR_LOG(PR_LOG_TRACE, "success");
 }
 
 PlayreadySession::~PlayreadySession()
 {
-    DRM_RESULT dr = DRM_SUCCESS;
-
-    PR_LOG(PR_LOG_DEBUG, "entry");
-
-    SafeCriticalSection systemLock(prSessionMutex_);
-
-    if ( IsPlayreadySessionInit() )
-    {
-        SAFE_OEM_FREE(m_pbPROpaqueBuf);
-        m_cbPROpaqueBuf = 0;
-
-        if (m_poAppContext != nullptr)
-        {
-            Drm_Uninitialize(m_poAppContext);
-            SAFE_OEM_FREE(m_poAppContext);
-            m_poAppContext = nullptr;
-        }
-    }
-
-    dr = CPRDrmPlatform::DrmPlatformUninitialize();
-    if (DRM_FAILED( dr )) {
-        PR_LOG(PR_LOG_ERROR, "failed. 0x%X - %s",dr,DRM_ERR_NAME(dr));
-    } else {
-        PR_LOG(PR_LOG_DEBUG, "exit success");
-    }
-}
-
-DRM_APP_CONTEXT * PlayreadySession::InitializeDRM(const DRM_CONST_STRING * pDRMStoreName)
-{
-    DRM_RESULT dr = DRM_SUCCESS;
-    DRM_VOID *pDrmOemContext = nullptr;
-    
-    PR_LOG(PR_LOG_DEBUG, "entry");
-
-    SafeCriticalSection systemLock(prSessionMutex_);
-
-    m_bInitCalled = true;
-
-    if (m_poAppContext == nullptr)
-    {
-        PR_LOG(PR_LOG_INFO, "m_poAppContext is null");
-        ChkMem( m_pbPROpaqueBuf = (DRM_BYTE *)Oem_MemAlloc(MINIMUM_APPCONTEXT_OPAQUE_BUFFER_SIZE) );
-        ZEROMEM(m_pbPROpaqueBuf, MINIMUM_APPCONTEXT_OPAQUE_BUFFER_SIZE);
-        m_cbPROpaqueBuf = MINIMUM_APPCONTEXT_OPAQUE_BUFFER_SIZE;
-
-        ChkMem( m_poAppContext = (DRM_APP_CONTEXT * )Oem_MemAlloc( sizeof(DRM_APP_CONTEXT) ) );
-        ZEROMEM( m_poAppContext, sizeof(DRM_APP_CONTEXT) );
-
-        svpGetDrmOEMContext(&pDrmOemContext);
-
-        PR_LOG(PR_LOG_INFO, "call Drm_Initialize()");
-        dr = Drm_Initialize(m_poAppContext, pDrmOemContext, m_pbPROpaqueBuf, m_cbPROpaqueBuf, pDRMStoreName);
-        if (dr != DRM_SUCCESS)
-        {
-            PR_LOG(PR_LOG_INFO, "Drm_Initialize failed. 0x%X - %s and try one more time...",dr,DRM_ERR_NAME(dr));
-            ChkDR(Drm_Initialize(m_poAppContext, pDrmOemContext, m_pbPROpaqueBuf, m_cbPROpaqueBuf, pDRMStoreName));
-        }
-    }
-    else
-    {
-        PR_LOG(PR_LOG_INFO, "m_poAppContext is valid but re-init again...");
-        dr = Drm_Reinitialize(m_poAppContext);
-        if (DRM_FAILED(dr))
-        {
-            PR_LOG(PR_LOG_ERROR, "Drm_Reinitialize failed. 0x%X - %s",dr,DRM_ERR_NAME(dr));
-        }
-    }
-
-ErrorExit:
-    if (DRM_FAILED(dr)) {
-        PR_LOG(PR_LOG_ERROR, "InitializeDRM failed. 0x%X - %s ",dr,DRM_ERR_NAME(dr));
-        m_poAppContext = nullptr;
-    } else {
-        PR_LOG(PR_LOG_DEBUG, "exit success");
-    }
-  return m_poAppContext;
+    PR_LOG(PR_LOG_TRACE, "success");
 }
 
 MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitData, const uint8_t *f_pbCDMData, uint32_t f_cbCDMData, DRM_APP_CONTEXT * poAppContext, bool initiateChallengeGeneration /* = false */)
@@ -568,7 +480,7 @@ MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitD
 
     PR_LOG(PR_LOG_DEBUG, "entry");
 
-    #ifdef USE_SVP
+#ifdef USE_SVP
     gst_svp_ext_get_context(&m_pSVPContext, Client, 0);
 
     m_stSecureBuffInfo.bCreateSecureMemRegion = true;
@@ -579,7 +491,7 @@ MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitD
         /* No need to break here */
         m_stSecureBuffInfo.SecureMemRegionSize = 0;
     }
-    #endif
+#endif
 
     std::string initData(reinterpret_cast<const char*>(f_pbInitData), f_cbInitData);
     std::string playreadyInitData;
@@ -591,11 +503,8 @@ MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitD
     mMaxResDecodeSet = false;
 
     if (m_poAppContext == nullptr) {
-        PR_LOG(PR_LOG_INFO, "m_poAppContext is not valid, calling InitializeDRM...");
-        m_poAppContext = InitializeDRM(&g_dstrCDMDrmStoreName);
-        if (m_poAppContext == nullptr) {
-            goto ErrorExit;
-        }
+        PR_LOG(PR_LOG_ERROR, "m_poAppContext is not valid");
+        goto ErrorExit;
     }
 
     if (DRM_REVOCATION_IsRevocationSupported()) {
@@ -1529,7 +1438,7 @@ DECRYPT_CONTEXT MediaKeySession::GetDecryptCtx( KeyId &f_rKeyId )
             return ctx;
         }
     }
-    PR_LOG(PR_LOG_ERROR, "exit. ctx not found");
+    PR_LOG(PR_LOG_WARN, "exit. ctx not found");
     return nullptr;
 }
 
@@ -1900,7 +1809,7 @@ CDMi_RESULT MediaKeySession::Decrypt(
 
   if (!m_fCommit) {
     err = Drm_Reader_Commit(m_poAppContext, _PolicyCallback, &m_playreadyLevels);
-    PR_LOG(PR_LOG_ERROR, "Drm_Reader_Commit result. 0x%X - %s",err,DRM_ERR_NAME(err));
+    PR_LOG(PR_LOG_WARN, "Drm_Reader_Commit result. 0x%X - %s",err,DRM_ERR_NAME(err));
     m_fCommit = TRUE;
   }
 
