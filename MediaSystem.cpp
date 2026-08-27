@@ -372,8 +372,11 @@ public:
             uint32_t drmHeaderLength,
             IMediaKeySessionExt** session) /* override */
     {
+        DRM_RESULT rnd = DRM_S_FALSE;
         bool isNetflixPlayready = (strstr(keySystem.c_str(), "netflix") != nullptr);
         PR_LOG(PR_LOG_DEBUG, "entry isNetflixPlayready[%d] m_sessionCount[%d]", isNetflixPlayready, m_sessionCount);
+
+        SafeCriticalSection systemLock(drmAppContextMutex_);
 
         if(session == NULL) {
             PR_LOG(PR_LOG_DEBUG, "Invalid input, session is null");
@@ -390,18 +393,25 @@ public:
             return CDMi_FAIL;
         }
 
-        SafeCriticalSection systemLock(drmAppContextMutex_);
-
         *session = new CDMi::MediaKeySession(drmHeader, drmHeaderLength, m_poAppContext.get(), !isNetflixPlayready);
+
+        /* Store the MediaKeySession with random generated SessionId */
+        do {
+            rnd = Oem_Random_GetBytes(nullptr, reinterpret_cast<DRM_BYTE*>(&m_sessionId), SIZEOF(m_sessionId));
+        } while (rnd == DRM_SUCCESS && (m_sessionMap.find(m_sessionId) != m_sessionMap.end()));
+
+        if (DRM_FAILED(rnd)) {
+            PR_LOG(PR_LOG_ERROR, "Failed to generate sessionId");
+            delete *session;
+            *session = nullptr;
+            return CDMi_FAIL;
+        }
+        m_sessionMap.emplace(m_sessionId, reinterpret_cast<IMediaKeySession*>(*session));
 
         /* Session count */
         ++m_sessionCount;
 
-        /* Store the MediaKeySession with random generated SessionId */
-        Oem_Random_GetBytes(nullptr, (DRM_BYTE *)&m_sessionId, SIZEOF(m_sessionId));
-        m_sessionMap[m_sessionId] = reinterpret_cast<const IMediaKeySession*>(*session);
-
-        PR_LOG(PR_LOG_DEBUG, "exit MediakeySession[0x%X] m_sessionId[%u] sessionCount[%u]",*session, m_sessionId, m_sessionCount);
+        PR_LOG(PR_LOG_DEBUG, "exit MediakeySession[%p] m_sessionId[%u] sessionCount[%u]",reinterpret_cast<void*>(*session), m_sessionId, m_sessionCount);
 
         return CDMi_SUCCESS;
     }
