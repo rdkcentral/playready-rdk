@@ -1846,7 +1846,9 @@ CDMi_RESULT MediaKeySession::Decrypt(
       m_stSecureBuffInfo.bReleaseSecureMemRegion = false;
       // Free decrypted secure buffer.
       svp_release_secure_buffers(m_pSVPContext, (void*)&m_stSecureBuffInfo, (void*)m_stSecureBuffInfo.pAVSecBuffer , nullptr, 0);
-      svp_buffer_free_token(pSecureToken);
+      // Token was never handed off downstream, so it must be destroyed here
+      // (not just locally freed) or its underlying platform resource leaks.
+      svp_buffer_destroy_token(pSecureToken);
     }
 #endif
     return CDMi_S_FALSE;
