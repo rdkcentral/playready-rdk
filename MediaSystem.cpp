@@ -201,6 +201,14 @@ public:
             return CDMi_FAIL;
         }
 
+#if defined DRM_ANTI_ROLLBACK_CLOCK_SUPPORT
+        CDMi_RESULT cr = InitializeAntiRollBackClock();
+        if (CDMi_SUCCESS != cr)
+        {
+            PR_LOG(PR_LOG_ERROR, "InitializeAntiRollBackClock failed in CreateMediaKeySession");
+        }
+#endif
+
         *f_ppiMediaKeySession = new CDMi::MediaKeySession(f_pbInitData, f_cbInitData, f_pbCDMData, f_cbCDMData, m_poAppContext.get());
 
         /* Store the MediaKeySession with random generated SessionId */
@@ -222,6 +230,36 @@ public:
         PR_LOG(PR_LOG_DEBUG, "exit MediakeySession[%p] m_sessionId[%u] sessionCount[%u]", static_cast<void*>(*f_ppiMediaKeySession), m_sessionId, m_sessionCount);
         return CDMi_SUCCESS;
     }
+
+    CDMi_RESULT InitializeAntiRollBackClock()
+    {
+        DRM_RESULT dr = DRM_SUCCESS;
+        DRMSYSTEMTIME   systemTime;
+        struct timeval  tv;
+        struct tm      *tm;
+
+        PR_LOG(PR_LOG_DEBUG, "trying the Anti-Rollback Clock...");
+
+        gettimeofday(&tv, nullptr);
+        tm = gmtime(&tv.tv_sec);
+
+        systemTime.wYear         = tm->tm_year+1900;
+        systemTime.wMonth        = tm->tm_mon+1;
+        systemTime.wDayOfWeek    = tm->tm_wday;
+        systemTime.wDay          = tm->tm_mday;
+        systemTime.wHour         = tm->tm_hour;
+        systemTime.wMinute       = tm->tm_min;
+        systemTime.wSecond       = tm->tm_sec;
+        systemTime.wMilliseconds = tv.tv_usec/1000;
+
+        dr = Drm_AntiRollBackClock_Init(m_poAppContext.get(), &systemTime);
+        if( dr != 0)
+        {
+             PR_LOG(PR_LOG_ERROR, "Failed to initialize Anti-Rollback Clock, quitting....0x%X - %s",dr,DRM_ERR_NAME(dr));
+             return CDMi_S_FALSE;
+        }
+        return CDMi_SUCCESS;
+    } 
 
     CDMi_RESULT SetSecureStopPublisherCert( const DRM_BYTE *f_pbPublisherCert, DRM_DWORD f_cbPublisherCert )
     {
@@ -805,30 +843,11 @@ public:
                 {
                     PR_LOG(PR_LOG_DEBUG, "Drm_SecureTime_GetValue return 0x%X - %s",dr,DRM_ERR_NAME(dr));
 #if defined DRM_ANTI_ROLLBACK_CLOCK_SUPPORT
-                    DRMSYSTEMTIME   systemTime;
-                    struct timeval  tv;
-                    struct tm      *tm;
-
-                    PR_LOG(PR_LOG_DEBUG, "Secure Clock not supported, trying the Anti-Rollback Clock...");
-
-                    gettimeofday(&tv, nullptr);
-                    tm = gmtime(&tv.tv_sec);
-
-                    systemTime.wYear         = tm->tm_year+1900;
-                    systemTime.wMonth        = tm->tm_mon+1;
-                    systemTime.wDayOfWeek    = tm->tm_wday;
-                    systemTime.wDay          = tm->tm_mday;
-                    systemTime.wHour         = tm->tm_hour;
-                    systemTime.wMinute       = tm->tm_min;
-                    systemTime.wSecond       = tm->tm_sec;
-                    systemTime.wMilliseconds = tv.tv_usec/1000;
-
-                    dr = Drm_AntiRollBackClock_Init(m_poAppContext.get(), &systemTime);
-                    if( dr != 0)
+                    CDMi_RESULT cr = InitializeAntiRollBackClock();
+	            if (CDMi_SUCCESS != cr)
                     {
-                        PR_LOG(PR_LOG_ERROR, "Failed to initialize Anti-Rollback Clock, quitting....0x%X - %s",dr,DRM_ERR_NAME(dr));
-                        cResult = CDMi_FAIL;
-                        break;
+                        PR_LOG(PR_LOG_ERROR, "InitializeAntiRollBackClock failed");
+                        return CDMi_S_FALSE;
                     }
 #else
                 PR_LOG(PR_LOG_ERROR, "Secure Clock and Anti-Rollback Clock is not supported...");
