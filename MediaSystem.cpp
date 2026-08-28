@@ -406,42 +406,6 @@ public:
 
         PR_LOG(PR_LOG_DEBUG, "exit MediakeySession[%p] m_sessionId[%u] sessionCount[%u]",reinterpret_cast<void*>(*session), m_sessionId, m_sessionCount);
 
-        /* Store the MediaKeySession with random generated SessionId */
-        do {
-            rnd = Oem_Random_GetBytes(nullptr, reinterpret_cast<DRM_BYTE*>(&m_sessionId), SIZEOF(m_sessionId));
-        } while (rnd == DRM_SUCCESS && (m_sessionMap.find(m_sessionId) != m_sessionMap.end()));
-
-        if (DRM_FAILED(rnd)) {
-            PR_LOG(PR_LOG_ERROR, "Failed to generate sessionId");
-            delete *session;
-            *session = nullptr;
-            return CDMi_FAIL;
-        }
-        m_sessionMap.emplace(m_sessionId, reinterpret_cast<IMediaKeySession*>(*session));
-
-        /* Session count */
-        ++m_sessionCount;
-
-        PR_LOG(PR_LOG_DEBUG, "exit MediakeySession[%p] m_sessionId[%u] sessionCount[%u]",reinterpret_cast<void*>(*session), m_sessionId, m_sessionCount);
-
-        /* Store the MediaKeySession with random generated SessionId */
-        do {
-            rnd = Oem_Random_GetBytes(nullptr, reinterpret_cast<DRM_BYTE*>(&m_sessionId), SIZEOF(m_sessionId));
-        } while (rnd == DRM_SUCCESS && (m_sessionMap.find(m_sessionId) != m_sessionMap.end()));
-
-        if (DRM_FAILED(rnd)) {
-            PR_LOG(PR_LOG_ERROR, "Failed to generate sessionId");
-            delete *session;
-            *session = nullptr;
-            return CDMi_FAIL;
-        }
-        m_sessionMap.emplace(m_sessionId, reinterpret_cast<IMediaKeySession*>(*session));
-
-        /* Session count */
-        ++m_sessionCount;
-
-        PR_LOG(PR_LOG_DEBUG, "exit MediakeySession[%p] m_sessionId[%u] sessionCount[%u]",reinterpret_cast<void*>(*session), m_sessionId, m_sessionCount);
-
         return CDMi_SUCCESS;
     }
 
