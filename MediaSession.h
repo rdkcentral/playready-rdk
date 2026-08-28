@@ -243,8 +243,6 @@ public:
     PlayreadySession();
     ~PlayreadySession();
 
-    DRM_APP_CONTEXT *InitializeDRM(const DRM_CONST_STRING * pDRMStoreName);
-
     bool IsPlayreadySessionInit() { return m_bInitCalled; }
 
 protected:
