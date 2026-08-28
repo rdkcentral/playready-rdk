@@ -177,6 +177,79 @@ public:
         SAFE_OEM_FREE( m_pbPublisherCert );
     }
 
+    CDMi_RESULT UpdateDrmClock()
+    {
+        DRMFILETIME               ftSystemTime; /* Initialized by Drm_SecureTime_GetValue */
+        DRM_SECURETIME_CLOCK_TYPE eClockType;   /* Initialized by Drm_SecureTime_GetValue */
+        DRM_RESULT dr = DRM_SUCCESS;
+        CDMi_RESULT cResult = CDMi_SUCCESS;
+        bool bIsInitSecureClockNeed = false;
+
+        PR_LOG(PR_LOG_DEBUG, "entry");
+
+        for(;;) {
+            bIsInitSecureClockNeed = svpIsSecureClockInitNeed();
+
+            PR_LOG(PR_LOG_DEBUG, "bIsInitSecureClockNeed [%d]", bIsInitSecureClockNeed);
+
+            if(!bIsInitSecureClockNeed) {
+                cResult = CDMi_SUCCESS;
+                break;
+            }
+
+            PR_LOG(PR_LOG_DEBUG, "Drm_SecureTime_GetValue calling...");
+            dr = Drm_SecureTime_GetValue( m_poAppContext.get(), &ftSystemTime, &eClockType  );
+            if (dr == DRM_E_CLK_NOT_SUPPORTED)  /* Secure Clock not supported, try the Anti-Rollback Clock */
+            {
+                PR_LOG(PR_LOG_WARN, "Drm_SecureTime_GetValue return 0x%X - %s",dr,DRM_ERR_NAME(dr));
+#if defined DRM_ANTI_ROLLBACK_CLOCK_SUPPORT
+                DRMSYSTEMTIME   systemTime;
+                struct timeval  tv;
+                struct tm      *tm;
+
+                PR_LOG(PR_LOG_DEBUG, "Secure Clock not supported, trying the Anti-Rollback Clock...");
+
+                gettimeofday(&tv, nullptr);
+                tm = gmtime(&tv.tv_sec);
+
+                systemTime.wYear         = tm->tm_year+1900;
+                systemTime.wMonth        = tm->tm_mon+1;
+                systemTime.wDayOfWeek    = tm->tm_wday;
+                systemTime.wDay          = tm->tm_mday;
+                systemTime.wHour         = tm->tm_hour;
+                systemTime.wMinute       = tm->tm_min;
+                systemTime.wSecond       = tm->tm_sec;
+                systemTime.wMilliseconds = tv.tv_usec/1000;
+
+                dr = Drm_AntiRollBackClock_Init(m_poAppContext.get(), &systemTime);
+                if( dr != 0)
+                {
+                    PR_LOG(PR_LOG_ERROR, "Failed to initialize Anti-Rollback Clock, quitting....0x%X - %s",dr,DRM_ERR_NAME(dr));
+                    cResult = CDMi_FAIL;
+                    break;
+                }
+
+                break;
+#else
+            PR_LOG(PR_LOG_ERROR, "Secure Clock and Anti-Rollback Clock is not supported...");
+            cResult = CDMi_FAIL;
+            break;
+#endif
+            }
+
+            PR_LOG(PR_LOG_DEBUG, "Drm_SecureTime_GetValue return 0x%X - %s",dr,DRM_ERR_NAME(dr));
+            if (dr != 0) {
+                PR_LOG(PR_LOG_ERROR, "Expect platform to support Secure Clock or Anti-Rollback Clock.");
+                cResult = CDMi_FAIL;
+                break;
+            }
+
+            break;
+        }
+
+        return cResult;
+    }
+
     CDMi_RESULT CreateMediaKeySession(
         const std::string & keySystem,
         int32_t licenseType,
@@ -198,6 +271,12 @@ public:
 
         if (m_poAppContext.get() == nullptr) {
             PR_LOG(PR_LOG_ERROR, "App Context is not valid");
+            return CDMi_FAIL;
+        }
+
+        /* Update the DRM Secure Clock time */
+        if (CDMi_SUCCESS != UpdateDrmClock()) {
+            PR_LOG(PR_LOG_ERROR, "Drm Clock update failed");
             return CDMi_FAIL;
         }
 
@@ -790,61 +869,12 @@ public:
                 break;
             }
 
-            bIsInitSecureClockNeed = svpIsSecureClockInitNeed();
-            PR_LOG(PR_LOG_DEBUG, "bIsInitSecureClockNeed [%d]", bIsInitSecureClockNeed);
-
-            if(bIsInitSecureClockNeed) {
-                DRMFILETIME               ftSystemTime; /* Initialized by Drm_SecureTime_GetValue */
-                DRM_SECURETIME_CLOCK_TYPE eClockType;   /* Initialized by Drm_SecureTime_GetValue */
-
-                DRM_RESULT dr = DRM_SUCCESS;
-
-                PR_LOG(PR_LOG_DEBUG, "Drm_SecureTime_GetValue calling...");
-                dr = Drm_SecureTime_GetValue( m_poAppContext.get(), &ftSystemTime, &eClockType  );
-                if (dr == DRM_E_CLK_NOT_SUPPORTED)  /* Secure Clock not supported, try the Anti-Rollback Clock */
-                {
-                    PR_LOG(PR_LOG_DEBUG, "Drm_SecureTime_GetValue return 0x%X - %s",dr,DRM_ERR_NAME(dr));
-#if defined DRM_ANTI_ROLLBACK_CLOCK_SUPPORT
-                    DRMSYSTEMTIME   systemTime;
-                    struct timeval  tv;
-                    struct tm      *tm;
-
-                    PR_LOG(PR_LOG_DEBUG, "Secure Clock not supported, trying the Anti-Rollback Clock...");
-
-                    gettimeofday(&tv, nullptr);
-                    tm = gmtime(&tv.tv_sec);
-
-                    systemTime.wYear         = tm->tm_year+1900;
-                    systemTime.wMonth        = tm->tm_mon+1;
-                    systemTime.wDayOfWeek    = tm->tm_wday;
-                    systemTime.wDay          = tm->tm_mday;
-                    systemTime.wHour         = tm->tm_hour;
-                    systemTime.wMinute       = tm->tm_min;
-                    systemTime.wSecond       = tm->tm_sec;
-                    systemTime.wMilliseconds = tv.tv_usec/1000;
-
-                    dr = Drm_AntiRollBackClock_Init(m_poAppContext.get(), &systemTime);
-                    if( dr != 0)
-                    {
-                        PR_LOG(PR_LOG_ERROR, "Failed to initialize Anti-Rollback Clock, quitting....0x%X - %s",dr,DRM_ERR_NAME(dr));
-                        cResult = CDMi_FAIL;
-                        break;
-                    }
-#else
-                PR_LOG(PR_LOG_ERROR, "Secure Clock and Anti-Rollback Clock is not supported...");
+            /* Update the DRM Secure Clock time */
+            cResult = UpdateDrmClock();
+            if (CDMi_SUCCESS != cResult) {
+                PR_LOG(PR_LOG_ERROR, "Drm Clock update failed");
                 cResult = CDMi_FAIL;
                 break;
-#endif
-                }
-                else
-                {
-                    PR_LOG(PR_LOG_DEBUG, "Drm_SecureTime_GetValue return 0x%X - %s",dr,DRM_ERR_NAME(dr));
-                    if (dr != 0) {
-                        PR_LOG(PR_LOG_ERROR, "Expect platform to support Secure Clock or Anti-Rollback Clock.");
-                        cResult = CDMi_FAIL;
-                        break;
-                    }
-                }
             }
 
             if( !svpLoadRevocationList())
