@@ -75,13 +75,13 @@ KeyId::KeyId( const DRM_BYTE *f_pBytes , KeyIdOrder keyOrder)
 
 DRM_RESULT KeyId::keyDecode( const DRM_CONST_STRING &f_pdstrB64 ){
 
-    DRM_DWORD cBytes = DRM_ID_SIZE;
-	DRM_RESULT dr = DRM_B64_DecodeW( &f_pdstrB64, &cBytes, getmBytes(), 0 );
-	if ( dr != DRM_SUCCESS )
-	{
-		fprintf(stderr, "\n[keyDecode] DRM_B64_DecodeW Failed");
-	}
-	return dr;
+  DRM_DWORD cBytes = DRM_ID_SIZE;
+  DRM_RESULT dr = DRM_B64_DecodeW( &f_pdstrB64, &cBytes, getmBytes(), 0 );
+  if ( dr != DRM_SUCCESS )
+  {
+    fprintf(stderr, "\n[keyDecode] DRM_B64_DecodeW Failed");
+  }
+  return dr;
 }
 
 void KeyId::setKeyIdOrder(KeyIdOrder keyOrder)
@@ -1100,7 +1100,7 @@ CDMi_RESULT MediaKeySession::PersistentLicenseCheck() {
     for( DRM_DWORD idx = 0; idx < m_cHeaderKIDs; idx++ ){
 
         KeyId keyId;
-		keyId.keyDecode(m_pdstrHeaderKIDs[ idx ]);
+        keyId.keyDecode(m_pdstrHeaderKIDs[ idx ]);
         keyId.setKeyIdOrder(KeyId::KEYID_ORDER_GUID_LE);
 
         DECRYPT_CONTEXT decryptContext;
@@ -1594,10 +1594,10 @@ CDMi_RESULT MediaKeySession::Decrypt(
   bool bIsDynamicSVPEncEnabled = false;
   uint64_t mCurrentPixels;
   bool bIsAudioNeedNonSVPContext;
-  bool bIsMultipleOpaqueSupportCTR = false;
   DRM_DWORD decryptedLength = 0;
   DRM_BYTE* pDecryptedContent = NULL;
   DRM_BYTE*  pEncryptedData = NULL;
+  DRM_DECRYPT_CONTEXT *pDecCtxToUse = nullptr;
 
   PR_LOG(PR_LOG_TRACE, "entry");
   PR_LOG(PR_LOG_TRACE, "inDataLength[%u]", inDataLength);
@@ -1760,16 +1760,16 @@ CDMi_RESULT MediaKeySession::Decrypt(
     }
   }
 
-    PR_LOG(PR_LOG_TRACE, "EncScheme [%u] encrypted_blocks[%d]", sampleInfo->scheme, sampleInfo->pattern.encrypted_blocks);
+  PR_LOG(PR_LOG_TRACE, "EncScheme [%u] encrypted_blocks[%d]", sampleInfo->scheme, sampleInfo->pattern.encrypted_blocks);
 
-    if (sampleInfo->scheme == AesCbc_Cbcs) {
-        // Always push the pattern for CBCS, even if it's 0:0 for Audio
-        encryptedRegionSkip.push_back(sampleInfo->pattern.encrypted_blocks);
-        encryptedRegionSkip.push_back(sampleInfo->pattern.clear_blocks);
-    } else if (sampleInfo->pattern.encrypted_blocks != 0) {
-        encryptedRegionSkip.push_back(sampleInfo->pattern.encrypted_blocks);
-        encryptedRegionSkip.push_back(sampleInfo->pattern.clear_blocks);
-    }
+  if (sampleInfo->scheme == AesCbc_Cbcs) {
+      // Always push the pattern for CBCS, even if it's 0:0 for Audio
+      encryptedRegionSkip.push_back(sampleInfo->pattern.encrypted_blocks);
+      encryptedRegionSkip.push_back(sampleInfo->pattern.clear_blocks);
+  } else if (sampleInfo->pattern.encrypted_blocks != 0) {
+      encryptedRegionSkip.push_back(sampleInfo->pattern.encrypted_blocks);
+      encryptedRegionSkip.push_back(sampleInfo->pattern.clear_blocks);
+  }
 
   if (useSVP)
   {
@@ -1779,80 +1779,36 @@ CDMi_RESULT MediaKeySession::Decrypt(
   }
   else
   {
-      pEncryptedData = pEncryptedDataStart;
+    pEncryptedData = pEncryptedDataStart;
   }
 
-  bIsMultipleOpaqueSupportCTR = svpIsMultipleOpaqueSupportCTR();
+  bIsAudioNeedNonSVPContext = svpIsAudioNeedNonSVPContext();
 
-  PR_LOG(PR_LOG_TRACE, "bIsMultipleOpaqueSupportCTR [%u] ",bIsMultipleOpaqueSupportCTR);
+  PR_LOG(PR_LOG_TRACE, "bIsAudioNeedNonSVPContext [%u] useSVP[%u]",
+                                          bIsAudioNeedNonSVPContext,
+                                          useSVP);
 
-  /* For Video */
-  if (useSVP == true)
-  {
-    if(bIsMultipleOpaqueSupportCTR)
-    {
-      err = Drm_Reader_DecryptMultipleOpaque(&(m_currentDecryptContext->oDrmDecryptContext),
-                                                encryptedRegionIvCounts,
-                                                iv_vector,
-                                                iv_vector + 1,
-                                                &encryptedRegionCounts,
-                                                encryptedRegionMapping.size(),
-                                                &encryptedRegionMapping[0],
-                                                encryptedRegionSkip.size(),
-                                                &encryptedRegionSkip[0],
-                                                (DRM_DWORD) actualEncDataLength,
-                                                (DRM_BYTE *) pEncryptedData,
-                                                &decryptedLength,
-                                                &pDecryptedContent);
-    } else {
-      err = Drm_Reader_DecryptOpaque(
-                        &(m_currentDecryptContext->oDrmDecryptContext),
-                        encryptedRegionMapping.size(),
-                        reinterpret_cast<const DRM_DWORD*>(&encryptedRegionMapping[0]),
-                        iv_vector[0],
-                        actualEncDataLength,
-                        (DRM_BYTE *) pEncryptedData,
-                        &decryptedLength,
-                        &pDecryptedContent);
-    }
+  /* For Audio/Video with SVP case */
+  pDecCtxToUse = &(m_currentDecryptContext->oDrmDecryptContext);
 
+  /* For Audio with Non-SVP case */
+  if (!useSVP && bIsAudioNeedNonSVPContext) {
+    pDecCtxToUse = &(m_currentDecryptContext->oDrmDecryptAudioContext);
   }
-  else
-  {
-    bIsAudioNeedNonSVPContext = svpIsAudioNeedNonSVPContext();
-    PR_LOG(PR_LOG_TRACE, "bIsAudioNeedNonSVPContext [%u] ",bIsAudioNeedNonSVPContext);
 
-    if(bIsMultipleOpaqueSupportCTR)
-    {
-      /* For Audio with Non-SVP support*/
-      err = Drm_Reader_DecryptMultipleOpaque(&(bIsAudioNeedNonSVPContext ? m_currentDecryptContext->oDrmDecryptAudioContext :
-                                                  m_currentDecryptContext->oDrmDecryptContext),
-                                                encryptedRegionIvCounts,
-                                                iv_vector,
-                                                iv_vector + 1,
-                                                &encryptedRegionCounts,
-                                                encryptedRegionMapping.size(),
-                                                &encryptedRegionMapping[0],
-                                                encryptedRegionSkip.size(),
-                                                &encryptedRegionSkip[0],
-                                                (DRM_DWORD) actualEncDataLength,
-                                                (DRM_BYTE *) pEncryptedData,
-                                                &decryptedLength,
-                                                &pDecryptedContent);
-    } else {
-      err = Drm_Reader_DecryptOpaque(
-                        &(bIsAudioNeedNonSVPContext ? m_currentDecryptContext->oDrmDecryptAudioContext :
-                                                  m_currentDecryptContext->oDrmDecryptContext),
-                        encryptedRegionMapping.size(),
-                        reinterpret_cast<const DRM_DWORD*>(&encryptedRegionMapping[0]),
-                        iv_vector[0],
-                        actualEncDataLength,
-                        (DRM_BYTE *) pEncryptedData,
-                        &decryptedLength,
-                        &pDecryptedContent);
-    }
-
-  }
+  err = Drm_Reader_DecryptMultipleOpaque( pDecCtxToUse,
+                                          encryptedRegionIvCounts,
+                                          iv_vector,
+                                          iv_vector + 1,
+                                          &encryptedRegionCounts,
+                                          encryptedRegionMapping.size(),
+                                          &encryptedRegionMapping[0],
+                                          encryptedRegionSkip.size(),
+                                          &encryptedRegionSkip[0],
+                                          (DRM_DWORD) actualEncDataLength,
+                                          (DRM_BYTE *) pEncryptedData,
+                                          &decryptedLength,
+                                          &pDecryptedContent);
 
   if (DRM_FAILED(err))
   {
