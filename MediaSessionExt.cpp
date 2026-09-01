@@ -46,7 +46,7 @@ namespace CDMi {
 std::map<KeyId, DECRYPT_CONTEXT> mBindMap;
 static const DRM_CONST_STRING* RIGHTS[] = { &PLAY_RIGHT };
 
-static std::string convertToBase64(const std::vector<uint8_t>& data) {
+std::string convertToBase64(const std::vector<uint8_t>& data) {
     static const char lookup[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     std::string out;
     out.reserve(((data.size() + 2) / 3) * 4);
@@ -62,59 +62,6 @@ static std::string convertToBase64(const std::vector<uint8_t>& data) {
     if (valb > -6) out.push_back(lookup[((val << (8 - (valb + 8))) >> 2) & 0x3F]);
     while (out.size() % 4) out.push_back('=');
     return out;
-}
-
-MediaKeySession::MediaKeySession(const uint8_t drmHeader[], uint32_t drmHeaderLength, DRM_APP_CONTEXT * poAppContext, bool initiateChallengeGeneration /* = false */)
-   : m_pbRevocationBuffer(nullptr)
-   , m_eKeyState(KEY_CLOSED)
-   , m_pbChallenge(nullptr)
-   , m_cbChallenge(0)
-   , m_pchSilentURL(nullptr)
-   , m_piCallback(nullptr)
-   , mSessionId(0)
-   , mInitiateChallengeGeneration(initiateChallengeGeneration)
-   , m_cHeaderKIDs(0)
-   , m_pdstrHeaderKIDs( nullptr )
-   , m_eHeaderVersion( DRM_HEADER_VERSION_UNKNOWN )
-   , m_oBatchID( DRM_ID_EMPTY )
-   , m_currentDecryptContext( nullptr )
-#ifdef USE_SVP
-   , m_pSVPContext(nullptr)
-   , m_rpcID(0)
-#endif
-   , m_fCommit(false)
-   , m_poAppContext(poAppContext)
-   , m_decryptInited(false)
-   , m_bDRMInitializedLocally(false)
-{
-    ZEROMEM(m_rgchSessionID, SIZEOF(m_rgchSessionID));
-
-    PR_LOG(PR_LOG_DEBUG, "entry");
-
-#ifdef USE_SVP
-    gst_svp_ext_get_context(&m_pSVPContext, Client, m_rpcID);
-    m_stSecureBuffInfo.bCreateSecureMemRegion = true;
-    m_stSecureBuffInfo.SecureMemRegionSize = 512 * 1024;
-
-    if( 0 != svp_allocate_secure_buffers(m_pSVPContext, (void**)&m_stSecureBuffInfo, nullptr, nullptr, m_stSecureBuffInfo.SecureMemRegionSize))
-    {
-        m_stSecureBuffInfo.SecureMemRegionSize = 0;
-    }
-#endif
-
-    mDrmHeader.clear();
-    mDrmHeader.resize(drmHeaderLength);
-
-    if(drmHeaderLength) {
-        memcpy(&mDrmHeader[0], drmHeader, drmHeaderLength);
-        std::string base64Header = convertToBase64(mDrmHeader); 
-        PR_LOG(PR_LOG_TRACE, "DRM Header size[%u] (String):[%s]",mDrmHeader.size(), base64Header.c_str());
-    } else {
-        PR_LOG(PR_LOG_DEBUG, "drmHeaderLength is zero");
-    }
-
-    m_eKeyState = KEY_INIT;
-    PR_LOG(PR_LOG_DEBUG, "exit");
 }
 
 uint32_t MediaKeySession::GetSessionIdExt() const
@@ -134,7 +81,7 @@ CDMi_RESULT MediaKeySession::SetDrmHeader(const uint8_t drmHeader[], uint32_t dr
     if(drmHeaderLength) {
         memcpy(&mDrmHeader[0], drmHeader, drmHeaderLength);
         std::string base64Header = convertToBase64(mDrmHeader);
-        PR_LOG(PR_LOG_TRACE, "DRM Header size[%u] (String):[%s]",mDrmHeader.size(), base64Header.c_str());
+        PR_LOG(PR_LOG_TRACE, "DRM Header size[%zu] (String):[%s]",mDrmHeader.size(), base64Header.c_str());
     } else {
         PR_LOG(PR_LOG_DEBUG, "drmHeaderLength is zero");
     }
@@ -654,4 +601,3 @@ CDMi_RESULT MediaKeySession::CleanDecryptContext()
     return CDMi_SUCCESS;
 }
 }
-

@@ -56,6 +56,13 @@ extern DRM_CONST_STRING g_dstrCDMDrmStoreName;
 #define EXPECTED_AES_CBC_IVDATA_SIZE (16)
 using namespace std;
 
+enum class PlayreadyInitDataType
+{
+    PR_INIT_DATA_DRM_HEADER = 0,
+    PR_INIT_DATA_PRO,
+    PR_INIT_DATA_INVALID
+};
+
 KeyId::KeyId( const DRM_BYTE *f_pBytes , KeyIdOrder keyOrder)
 {
     m_hexStr.clear();
@@ -202,13 +209,61 @@ const DRM_CONST_STRING *g_rgpdstrRights[1] = {&g_dstrDRM_RIGHT_PLAYBACK};
 
 uint64_t MediaKeySession::mMaxResDecodePixels = 0;
 bool MediaKeySession::mMaxResDecodeSet = false;
+static const DRM_CHAR  acWRMHeaderStart[]     = "<WRMHEADER";
 
 WPEFramework::Core::CriticalSection prPlatformMutex_;
 WPEFramework::Core::CriticalSection prSessionMutex_;
 DRM_DWORD CPRDrmPlatform::m_dwInitRefCount = 0;
 
+extern std::string convertToBase64(const std::vector<uint8_t>& data);
+
+static bool IsPlayReadyHeader(const std::string& data)
+{
+    bool result = false;
+
+    PR_LOG(PR_LOG_DEBUG, "entry");
+
+    // UTF-16 LE XML
+    const char utf16Tag[] =
+    {
+        '<',0,
+        'W',0,
+        'R',0,
+        'M',0,
+        'H',0,
+        'E',0,
+        'A',0,
+        'D',0,
+        'E',0,
+        'R',0
+    };
+
+    for(;;) {
+        // UTF-8 XML
+        if (data.size() >= strlen(acWRMHeaderStart)
+            && memcmp(data.data(), acWRMHeaderStart, strlen(acWRMHeaderStart)) == 0)
+        {
+            result = true;
+            break;
+        }
+
+        if (data.size() >= sizeof(utf16Tag))
+        {
+            if (memcmp(data.data(), utf16Tag, sizeof(utf16Tag)) == 0) {
+                result = true;
+                break;
+            }
+        }
+
+        break;
+    }
+
+    PR_LOG(PR_LOG_DEBUG, "exit: isPlayreadyHeader found [%d]", result);
+    return result;
+}
+
 /*Parsing the first playready init header from _initData_. In success case the header will be stored in _output_*/
-bool parsePlayreadyInitializationData(const std::string& initData, std::string* output)
+PlayreadyInitDataType parsePlayreadyInitializationData(const std::string& initData, std::string* output)
 {
     BufferReader input(reinterpret_cast<const uint8_t*>(initData.data()), initData.length());
 
@@ -217,97 +272,130 @@ bool parsePlayreadyInitializationData(const std::string& initData, std::string* 
       0xAB, 0x92, 0xE6, 0x5B, 0xE0, 0x88, 0x5F, 0x95,
       
     };
+    bool bIsPlayReadyHeader = false;
+    PlayreadyInitDataType prInitDataType = PlayreadyInitDataType::PR_INIT_DATA_INVALID;
 
     PR_LOG(PR_LOG_DEBUG, "entry");
 
-    while (!input.IsEOF()) {
-      size_t startPosition = input.pos();
+    for (;;) {
 
-      uint64_t atomSize;
-
-      if (!input.Read4Into8(&atomSize)) {
-        return false;
-      }
-
-      std::vector<uint8_t> atomType;
-      if (!input.ReadVec(&atomType, 4)) {
-          return false;
-      }
-
-      if (atomSize == 1) {
-          if (!input.Read8(&atomSize)) {
-              return false;
-          }
-      } else if (atomSize == 0) {
-        atomSize = input.size() - startPosition;
-      }
-
-      if (memcmp(&atomType[0], "pssh", 4)) {
-          if (!input.SkipBytes(atomSize - (input.pos() - startPosition))) {
-            return false;
-          }
-          continue;
-      }
-
-      PR_LOG(PR_LOG_DEBUG, "PSSH data identified in InitData");
-
-      uint8_t version;
-      if (!input.Read1(&version)) {
-          return false;
-      }
-
-      if (version > 1) {
-        if (!input.SkipBytes(atomSize - (input.pos() - startPosition))) {
-          return false;
-        }
-        continue;
-      }
-
-      if (!input.SkipBytes(3)) {
-        return false;
-      }
-
-      std::vector<uint8_t> systemId;
-      if (!input.ReadVec(&systemId, sizeof(playreadySystemId))) {
-        return false;
-      }
-
-      if (memcmp(&systemId[0], playreadySystemId, sizeof(playreadySystemId))) {
-        if (!input.SkipBytes(atomSize - (input.pos() - startPosition))) {
-          return false;
-        }
-        continue;
-      }
-
-      PR_LOG(PR_LOG_DEBUG, "Playready SystemId matched!");
-
-      if (version == 1) {
-        uint32_t numKeyIds;
-        if (!input.Read4(&numKeyIds)) {
-          return false;
+        if(initData.empty()) {
+            PR_LOG(PR_LOG_ERROR, "initData data is empty");
+            break;
         }
 
-        if (!input.SkipBytes(numKeyIds * 16)) {
-          return false;
+        bIsPlayReadyHeader = IsPlayReadyHeader(initData);
+
+        //
+        // Try initData as DRM Header of string format
+        //
+        if(bIsPlayReadyHeader){
+
+            output->clear();
+
+            if (!input.ReadString(output, initData.length())) {
+                PR_LOG(PR_LOG_ERROR, "input BufferReader ReadString failed");
+                break;
+            }
+
+            prInitDataType = PlayreadyInitDataType::PR_INIT_DATA_DRM_HEADER;
+            PR_LOG(PR_LOG_DEBUG, "INIT_DATA_DRM_HEADER found initData.length[%zu]", initData.length());
+            break;
         }
-      }
 
-      uint32_t dataLength;
-      if (!input.Read4(&dataLength)) {
-        return false;
-      }
+        while (!input.IsEOF()) {
+            size_t startPosition = input.pos();
 
-      output->clear();
-      if (!input.ReadString(output, dataLength)) {
-        return false;
-      }
-      PR_LOG(PR_LOG_DEBUG, "InitData parse success!");
-      return true;
-  }
+            uint64_t atomSize;
 
-  PR_LOG(PR_LOG_ERROR, "InitData parse failed");
+            if (!input.Read4Into8(&atomSize)) {
+                break;
+            }
 
-  return false;
+            std::vector<uint8_t> atomType;
+            if (!input.ReadVec(&atomType, 4)) {
+                break;
+            }
+
+            if (atomSize == 1) {
+                if (!input.Read8(&atomSize)) {
+                    break;
+                }
+            } else if (atomSize == 0) {
+                atomSize = input.size() - startPosition;
+            }
+
+            if (memcmp(&atomType[0], "pssh", 4)) {
+                if (!input.SkipBytes(atomSize - (input.pos() - startPosition))) {
+                    break;
+                }
+                continue;
+            }
+
+            PR_LOG(PR_LOG_DEBUG, "PSSH data identified in InitData");
+
+            uint8_t version;
+            if (!input.Read1(&version)) {
+                break;
+            }
+
+            if (version > 1) {
+                if (!input.SkipBytes(atomSize - (input.pos() - startPosition))) {
+                    break;
+                }
+                continue;
+            }
+
+            if (!input.SkipBytes(3)) {
+                break;
+            }
+
+            std::vector<uint8_t> systemId;
+            if (!input.ReadVec(&systemId, sizeof(playreadySystemId))) {
+                break;
+            }
+
+            if (memcmp(&systemId[0], playreadySystemId, sizeof(playreadySystemId))) {
+                if (!input.SkipBytes(atomSize - (input.pos() - startPosition))) {
+                    break;
+                }
+                continue;
+            }
+
+            PR_LOG(PR_LOG_DEBUG, "Playready SystemId matched!");
+
+            if (version == 1) {
+                uint32_t numKeyIds;
+                if (!input.Read4(&numKeyIds)) {
+                    break;
+                }
+
+                if (!input.SkipBytes(numKeyIds * 16)) {
+                    break;
+                }
+            }
+
+            uint32_t dataLength;
+            if (!input.Read4(&dataLength)) {
+                break;
+            }
+
+            output->clear();
+            if (!input.ReadString(output, dataLength)) {
+                break;
+            }
+
+            PR_LOG(PR_LOG_TRACE, "InitData parse success! dataLength[%d]", dataLength);
+            prInitDataType = PlayreadyInitDataType::PR_INIT_DATA_PRO;
+            break;
+        }
+
+        break;
+    }
+
+  PR_LOG(PR_LOG_DEBUG, "exit: prInitDataType[%u]", prInitDataType );
+
+  return prInitDataType;
 }
 
 /*
@@ -441,100 +529,12 @@ PlayreadySession::PlayreadySession()
     , m_cbPROpaqueBuf(0)
     , m_bInitCalled(false)
 {
-    void *pPlatformInitData = NULL;
-    DRM_RESULT dr = DRM_SUCCESS;
-
-    PR_LOG(PR_LOG_DEBUG, "entry");
-
-    svpGetDrmPlatformInitData( &pPlatformInitData);
-
-    dr = CPRDrmPlatform::DrmPlatformInitialize(pPlatformInitData);
-
-    if (DRM_FAILED( dr )) {
-        PR_LOG(PR_LOG_ERROR, "failed. 0x%X - %s",dr,DRM_ERR_NAME(dr));
-    } else {
-        PR_LOG(PR_LOG_DEBUG, "exit success");
-    }
+    PR_LOG(PR_LOG_TRACE, "success");
 }
 
 PlayreadySession::~PlayreadySession()
 {
-    DRM_RESULT dr = DRM_SUCCESS;
-
-    PR_LOG(PR_LOG_DEBUG, "entry");
-
-    SafeCriticalSection systemLock(prSessionMutex_);
-
-    if ( IsPlayreadySessionInit() )
-    {
-        SAFE_OEM_FREE(m_pbPROpaqueBuf);
-        m_cbPROpaqueBuf = 0;
-
-        if (m_poAppContext != nullptr)
-        {
-            Drm_Uninitialize(m_poAppContext);
-            SAFE_OEM_FREE(m_poAppContext);
-            m_poAppContext = nullptr;
-        }
-    }
-
-    dr = CPRDrmPlatform::DrmPlatformUninitialize();
-    if (DRM_FAILED( dr )) {
-        PR_LOG(PR_LOG_ERROR, "failed. 0x%X - %s",dr,DRM_ERR_NAME(dr));
-    } else {
-        PR_LOG(PR_LOG_DEBUG, "exit success");
-    }
-}
-
-DRM_APP_CONTEXT * PlayreadySession::InitializeDRM(const DRM_CONST_STRING * pDRMStoreName)
-{
-    DRM_RESULT dr = DRM_SUCCESS;
-    DRM_VOID *pDrmOemContext = nullptr;
-    
-    PR_LOG(PR_LOG_DEBUG, "entry");
-
-    SafeCriticalSection systemLock(prSessionMutex_);
-
-    m_bInitCalled = true;
-
-    if (m_poAppContext == nullptr)
-    {
-        PR_LOG(PR_LOG_INFO, "m_poAppContext is null");
-        ChkMem( m_pbPROpaqueBuf = (DRM_BYTE *)Oem_MemAlloc(MINIMUM_APPCONTEXT_OPAQUE_BUFFER_SIZE) );
-        ZEROMEM(m_pbPROpaqueBuf, MINIMUM_APPCONTEXT_OPAQUE_BUFFER_SIZE);
-        m_cbPROpaqueBuf = MINIMUM_APPCONTEXT_OPAQUE_BUFFER_SIZE;
-
-        ChkMem( m_poAppContext = (DRM_APP_CONTEXT * )Oem_MemAlloc( sizeof(DRM_APP_CONTEXT) ) );
-        ZEROMEM( m_poAppContext, sizeof(DRM_APP_CONTEXT) );
-
-        svpGetDrmOEMContext(&pDrmOemContext);
-
-        PR_LOG(PR_LOG_INFO, "call Drm_Initialize()");
-        dr = Drm_Initialize(m_poAppContext, pDrmOemContext, m_pbPROpaqueBuf, m_cbPROpaqueBuf, pDRMStoreName);
-        if (dr != DRM_SUCCESS)
-        {
-            PR_LOG(PR_LOG_INFO, "Drm_Initialize failed. 0x%X - %s and try one more time...",dr,DRM_ERR_NAME(dr));
-            ChkDR(Drm_Initialize(m_poAppContext, pDrmOemContext, m_pbPROpaqueBuf, m_cbPROpaqueBuf, pDRMStoreName));
-        }
-    }
-    else
-    {
-        PR_LOG(PR_LOG_INFO, "m_poAppContext is valid but re-init again...");
-        dr = Drm_Reinitialize(m_poAppContext);
-        if (DRM_FAILED(dr))
-        {
-            PR_LOG(PR_LOG_ERROR, "Drm_Reinitialize failed. 0x%X - %s",dr,DRM_ERR_NAME(dr));
-        }
-    }
-
-ErrorExit:
-    if (DRM_FAILED(dr)) {
-        PR_LOG(PR_LOG_ERROR, "InitializeDRM failed. 0x%X - %s ",dr,DRM_ERR_NAME(dr));
-        m_poAppContext = nullptr;
-    } else {
-        PR_LOG(PR_LOG_DEBUG, "exit success");
-    }
-  return m_poAppContext;
+    PR_LOG(PR_LOG_TRACE, "success");
 }
 
 MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitData, const uint8_t *f_pbCDMData, uint32_t f_cbCDMData, DRM_APP_CONTEXT * poAppContext, bool initiateChallengeGeneration /* = false */)
@@ -565,10 +565,11 @@ MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitD
     DRM_ID              oSessionID    = DRM_ID_EMPTY;
     DRM_CONST_STRING    dstrWRMHEADER = DRM_EMPTY_DRM_STRING;
     DRM_DWORD cchEncodedSessionID = SIZEOF(m_rgchSessionID);
+    PlayreadyInitDataType initDataType = PlayreadyInitDataType::PR_INIT_DATA_INVALID;
 
     PR_LOG(PR_LOG_DEBUG, "entry");
 
-    #ifdef USE_SVP
+#ifdef USE_SVP
     gst_svp_ext_get_context(&m_pSVPContext, Client, 0);
 
     m_stSecureBuffInfo.bCreateSecureMemRegion = true;
@@ -579,7 +580,7 @@ MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitD
         /* No need to break here */
         m_stSecureBuffInfo.SecureMemRegionSize = 0;
     }
-    #endif
+#endif
 
     std::string initData(reinterpret_cast<const char*>(f_pbInitData), f_cbInitData);
     std::string playreadyInitData;
@@ -591,11 +592,8 @@ MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitD
     mMaxResDecodeSet = false;
 
     if (m_poAppContext == nullptr) {
-        PR_LOG(PR_LOG_INFO, "m_poAppContext is not valid, calling InitializeDRM...");
-        m_poAppContext = InitializeDRM(&g_dstrCDMDrmStoreName);
-        if (m_poAppContext == nullptr) {
-            goto ErrorExit;
-        }
+        PR_LOG(PR_LOG_ERROR, "m_poAppContext is not valid");
+        goto ErrorExit;
     }
 
     if (DRM_REVOCATION_IsRevocationSupported()) {
@@ -616,43 +614,63 @@ MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitD
                         &cchEncodedSessionID,
                         0));
 
-    if (!parsePlayreadyInitializationData(initData, &playreadyInitData)) {
-        playreadyInitData = initData;
+    initDataType = parsePlayreadyInitializationData(initData, &playreadyInitData);
+    PR_LOG(PR_LOG_INFO, "initDataType[%u]", initDataType);
+
+    switch(initDataType) {
+        case PlayreadyInitDataType::PR_INIT_DATA_DRM_HEADER:
+        case PlayreadyInitDataType::PR_INIT_DATA_PRO: {
+
+            mDrmHeader.resize( playreadyInitData.size() );
+
+            ::memcpy( &mDrmHeader[ 0 ],
+                    reinterpret_cast<const DRM_BYTE*>(playreadyInitData.data()),
+                    playreadyInitData.size() );
+
+            std::string base64Header = convertToBase64(mDrmHeader);
+            PR_LOG(PR_LOG_TRACE, "DRM Header size[%zu] (String):[%s]",mDrmHeader.size(), base64Header.c_str());
+
+            ChkDR(Drm_Content_SetProperty(m_poAppContext,
+                            DRM_CSP_AUTODETECT_HEADER,
+                            &mDrmHeader[ 0 ],
+                            mDrmHeader.size()) );
+
+            mInitiateChallengeGeneration = true;
+        }
+        break;
+        default:
+            mInitiateChallengeGeneration = false;
+        break;
     }
 
-    mDrmHeader.resize( playreadyInitData.size() );
-    ::memcpy( &mDrmHeader[ 0 ],
-            reinterpret_cast<const DRM_BYTE*>(playreadyInitData.data()),
-                                    playreadyInitData.size() );
+    PR_LOG(PR_LOG_TRACE, "mInitiateChallengeGeneration[%d]", mInitiateChallengeGeneration);
 
-    ChkDR(Drm_Content_SetProperty(m_poAppContext,
-                                    DRM_CSP_AUTODETECT_HEADER,
-                                    &mDrmHeader[ 0 ],
-                                    mDrmHeader.size()) );
+    if(mInitiateChallengeGeneration) {
 
-    DRM_CONST_DSTR_FROM_PB( &dstrWRMHEADER, &mDrmHeader[ 0 ], mDrmHeader.size() );
+        DRM_CONST_DSTR_FROM_PB( &dstrWRMHEADER, &mDrmHeader[ 0 ], mDrmHeader.size() );
+        ChkDR( Header_GetInfo( &dstrWRMHEADER,
+                                            &m_eHeaderVersion,
+                                            &m_pdstrHeaderKIDs,
+                                            &m_cHeaderKIDs ) );
 
-    ChkDR( Header_GetInfo( &dstrWRMHEADER,
-                                        &m_eHeaderVersion,
-                                        &m_pdstrHeaderKIDs,
-                                        &m_cHeaderKIDs ) );
-
-    for( DRM_DWORD idx = 0; idx < m_cHeaderKIDs; idx++ )
-    {
-        KeyId kid , kid2;
-        DRM_DWORD cBytes = DRM_ID_SIZE;
-        DRM_DWORD cBytes2 = DRM_ID_SIZE;
-
-        DRM_RESULT dr = DRM_B64_DecodeW( &m_pdstrHeaderKIDs[ idx ], &cBytes, kid.getmBytes(), 0 );
-        if ( dr == DRM_SUCCESS )
+        PR_LOG(PR_LOG_INFO, "m_cHeaderKIDs[%d]", m_cHeaderKIDs);
+        for( DRM_DWORD idx = 0; idx < m_cHeaderKIDs; idx++ )
         {
-            kid.setKeyIdOrder(KeyId::KEYID_ORDER_GUID_LE);
-        }  
+            KeyId kid , kid2;
+            DRM_DWORD cBytes = DRM_ID_SIZE;
+            DRM_DWORD cBytes2 = DRM_ID_SIZE;
 
-        DRM_RESULT dr2 = DRM_B64_DecodeW( &m_pdstrHeaderKIDs[ idx ], &cBytes2, kid2.getmBytes(), 0 );
-        if ( dr2 == DRM_SUCCESS )
-        {
-            kid2.setKeyIdOrder(KeyId::KEYID_ORDER_GUID_LE);
+            DRM_RESULT dr = DRM_B64_DecodeW( &m_pdstrHeaderKIDs[ idx ], &cBytes, kid.getmBytes(), 0 );
+            if ( dr == DRM_SUCCESS )
+            {
+                kid.setKeyIdOrder(KeyId::KEYID_ORDER_GUID_LE);
+            }
+
+            DRM_RESULT dr2 = DRM_B64_DecodeW( &m_pdstrHeaderKIDs[ idx ], &cBytes2, kid2.getmBytes(), 0 );
+            if ( dr2 == DRM_SUCCESS )
+            {
+                kid2.setKeyIdOrder(KeyId::KEYID_ORDER_GUID_LE);
+            }
         }
     }
 
@@ -1529,7 +1547,7 @@ DECRYPT_CONTEXT MediaKeySession::GetDecryptCtx( KeyId &f_rKeyId )
             return ctx;
         }
     }
-    PR_LOG(PR_LOG_ERROR, "exit. ctx not found");
+    PR_LOG(PR_LOG_WARN, "exit. ctx not found");
     return nullptr;
 }
 
@@ -1582,6 +1600,7 @@ CDMi_RESULT MediaKeySession::Decrypt(
   DRM_BYTE*  pEncryptedData = NULL;
 
   PR_LOG(PR_LOG_TRACE, "entry");
+  PR_LOG(PR_LOG_TRACE, "inDataLength[%u]", inDataLength);
 
   if(sampleInfo == NULL) {
       PR_LOG(PR_LOG_ERROR, "sampleInfo is null");
@@ -1595,6 +1614,8 @@ CDMi_RESULT MediaKeySession::Decrypt(
   }
 
   bIsVideoResCheckNeed = svpIsVideoResCheckNeed();
+
+  PR_LOG(PR_LOG_TRACE, "IsVideoResCheckNeed[%d]", bIsVideoResCheckNeed);
 
   if(bIsVideoResCheckNeed)
   {
@@ -1612,6 +1633,9 @@ CDMi_RESULT MediaKeySession::Decrypt(
   }
 
   bIsDynamicSVPEncEnabled = svpIsDynamicSVPEncEnabled();
+
+  PR_LOG(PR_LOG_TRACE, "IsDynamicSVPEncEnabled[%d]", bIsDynamicSVPEncEnabled);
+
   if(bIsDynamicSVPEncEnabled)
   {
     if (properties->GetMediaType() != Video) {
@@ -1636,24 +1660,18 @@ CDMi_RESULT MediaKeySession::Decrypt(
 
   SafeCriticalSection systemLock(drmAppContextMutex_);
 
-  if (properties->InitLength()) {
-      PR_LOG(PR_LOG_TRACE, "InitLength is enabled");
-      // Netflix case
-      size_t ivCopyLen = (sampleInfo->ivLength <= sizeof(iv_vector)) ? sampleInfo->ivLength : sizeof(iv_vector);
-      memcpy(iv_vector, sampleInfo->iv, ivCopyLen);
-
-  } else {
     // Regular case
     NETWORKBYTES_TO_QWORD(iv_vector[0], sampleInfo->iv, 0);
     if (sampleInfo->ivLength == 16) {
         NETWORKBYTES_TO_QWORD(iv_vector[1], sampleInfo->iv, 8);
     }
-  }
+
 
   if (gst_svp_has_header(m_pSVPContext, inData)) {
     header = (void*)inData;
     pEncryptedDataStart = reinterpret_cast<DRM_BYTE *>(gst_svp_header_get_start_of_data(m_pSVPContext, header));
     gst_svp_header_get_field(m_pSVPContext, header, SvpHeaderFieldName::DataSize, &actualEncDataLength);
+    PR_LOG(PR_LOG_TRACE, "svp Header found actualDataLength[%u]", actualEncDataLength);
   } else {
     pEncryptedDataStart = inData;
     actualEncDataLength = inDataLength;
@@ -1872,14 +1890,18 @@ CDMi_RESULT MediaKeySession::Decrypt(
 
     if(NULL != pDecryptedContent)
     {
+        PR_LOG(PR_LOG_TRACE, "decryptedLength[%u] actualEncDataLength[%u] ",decryptedLength, actualEncDataLength);
+
         if ((size_t)decryptedLength > actualEncDataLength) {
             free(pDecryptedContent);
             pDecryptedContent = NULL;
+            PR_LOG(PR_LOG_ERROR, "decryptedLength[%u] is higher than actualEncDataLength[%u]", decryptedLength, actualEncDataLength);
             return CDMi_S_FALSE;
         }
         memcpy((void *)(uint8_t*)pEncryptedDataStart, pDecryptedContent, decryptedLength);
         free(pDecryptedContent);
         pDecryptedContent = NULL;
+        PR_LOG(PR_LOG_TRACE, "InPlace data copy success. decryptedLength[%u]", decryptedLength);
     }
 
   }
@@ -1893,6 +1915,7 @@ CDMi_RESULT MediaKeySession::Decrypt(
 
   if (!m_fCommit) {
     err = Drm_Reader_Commit(m_poAppContext, _PolicyCallback, &m_playreadyLevels);
+    PR_LOG(PR_LOG_WARN, "Drm_Reader_Commit result. 0x%X - %s",err,DRM_ERR_NAME(err));
     m_fCommit = TRUE;
   }
 
