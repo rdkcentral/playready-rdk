@@ -50,7 +50,7 @@ using namespace std;
 
 DRM_CONST_STRING g_dstrCDMDrmStoreName;
 
-WPEFramework::Core::CriticalSection drmAppContextMutex_;
+Thunder::Core::CriticalSection drmAppContextMutex_;
 
 static DRM_WCHAR* createDrmWchar(std::string const& s) {
     DRM_WCHAR* w = new DRM_WCHAR[s.length() + 1];
@@ -124,7 +124,7 @@ namespace CDMi {
 
 class PlayReady : public IMediaKeys, public IMediaKeysExt {
 private:
-    class Config : public WPEFramework::Core::JSON::Container {
+    class Config : public Thunder::Core::JSON::Container {
     private:
         Config& operator= (const Config&);
 
@@ -148,9 +148,9 @@ private:
         }
 
     public:
-        WPEFramework::Core::JSON::String ReadDir;
-        WPEFramework::Core::JSON::String StoreLocation;
-        WPEFramework::Core::JSON::String HomePath;
+        Thunder::Core::JSON::String ReadDir;
+        Thunder::Core::JSON::String StoreLocation;
+        Thunder::Core::JSON::String HomePath;
 
         CDMi_RESULT SetSecureStopPublisherCert( const DRM_BYTE*, DRM_DWORD  );
     };
@@ -1004,7 +1004,7 @@ public:
         return cResult;
     }
 
-    void Deinitialize(const WPEFramework::PluginHost::IShell * shell)
+    void Deinitialize(const Thunder::PluginHost::IShell * shell)
     {
         PR_LOG(PR_LOG_DEBUG, "entry");
         CDMi_RESULT cr = TeardownSystemExt();
@@ -1172,12 +1172,12 @@ public:
         PR_LOG(PR_LOG_DEBUG, "m_storeLocation[%s] m_storePath[%s] m_readDir[%s]", m_storeLocation.c_str(), 
                                                         m_storePath.c_str(),
                                                         m_readDir.c_str() );
-        WPEFramework::Core::Directory(m_storePath.c_str()).CreatePath();
-        WPEFramework::Core::Directory(m_readDir.c_str()).CreatePath();
+        Thunder::Core::Directory(m_storePath.c_str()).CreatePath();
+        Thunder::Core::Directory(m_readDir.c_str()).CreatePath();
 
         string homePath = config.HomePath.Value();
         if(!homePath.empty()) {
-            WPEFramework::Core::SystemInfo::SetEnvironment(_T("HOME"), homePath.c_str());
+            Thunder::Core::SystemInfo::SetEnvironment(_T("HOME"), homePath.c_str());
         } else {
             PR_LOG(PR_LOG_WARN, "could not set HOME variable. SecureStop functionality may not work!");
         }
@@ -1188,7 +1188,7 @@ public:
         PR_LOG(PR_LOG_DEBUG, "exit");
     }
 
-    void Initialize(const WPEFramework::PluginHost::IShell * service, const std::string& configline)
+    void Initialize(const Thunder::PluginHost::IShell * service, const std::string& configline)
     {
         InitializeLogLevel();
         PR_LOG(PR_LOG_DEBUG, "entry");

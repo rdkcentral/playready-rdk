@@ -29,7 +29,7 @@
 
 using namespace std;
 
-extern WPEFramework::Core::CriticalSection drmAppContextMutex_;
+extern Thunder::Core::CriticalSection drmAppContextMutex_;
 
 const DRM_WCHAR PLAY[] = { ONE_WCHAR('P', '\0'),
                            ONE_WCHAR('l', '\0'),

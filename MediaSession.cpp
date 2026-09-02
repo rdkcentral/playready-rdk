@@ -28,7 +28,7 @@
 #include "gst_svp_meta.h"
 #endif
 
-extern WPEFramework::Core::CriticalSection drmAppContextMutex_;
+extern Thunder::Core::CriticalSection drmAppContextMutex_;
 extern DRM_CONST_STRING g_dstrCDMDrmStoreName;
 
 #define NYI_KEYSYSTEM "keysystem-placeholder"
@@ -211,8 +211,8 @@ uint64_t MediaKeySession::mMaxResDecodePixels = 0;
 bool MediaKeySession::mMaxResDecodeSet = false;
 static const DRM_CHAR  acWRMHeaderStart[]     = "<WRMHEADER";
 
-WPEFramework::Core::CriticalSection prPlatformMutex_;
-WPEFramework::Core::CriticalSection prSessionMutex_;
+Thunder::Core::CriticalSection prPlatformMutex_;
+Thunder::Core::CriticalSection prSessionMutex_;
 DRM_DWORD CPRDrmPlatform::m_dwInitRefCount = 0;
 
 extern std::string convertToBase64(const std::vector<uint8_t>& data);

@@ -186,7 +186,7 @@ typedef std::shared_ptr<__DECRYPT_CONTEXT> DECRYPT_CONTEXT;
 class SafeCriticalSection
 {
 public:
-    explicit SafeCriticalSection(WPEFramework::Core::CriticalSection& lock) : mLock(lock), mLocked(false)
+    explicit SafeCriticalSection(Thunder::Core::CriticalSection& lock) : mLock(lock), mLocked(false)
     {
         relock();
     }
@@ -212,10 +212,10 @@ public:
         }
     }
 
-    WPEFramework::Core::CriticalSection &mutex() { return mLock; }
-    const WPEFramework::Core::CriticalSection &mutex() const { return mLock; }
+    Thunder::Core::CriticalSection &mutex() { return mLock; }
+    const Thunder::Core::CriticalSection &mutex() const { return mLock; }
 private:
-    WPEFramework::Core::CriticalSection& mLock;
+    Thunder::Core::CriticalSection& mLock;
     bool mLocked;
 };
 
