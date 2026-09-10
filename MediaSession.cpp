@@ -1756,6 +1756,7 @@ CDMi_RESULT MediaKeySession::Decrypt(
         // Free decrypted secure buffer.
         svp_release_secure_buffers(m_pSVPContext, (void*)&m_stSecureBuffInfo, (void*)m_stSecureBuffInfo.pAVSecBuffer , nullptr, 0);
         svp_buffer_free_token(pSecureToken);
+        pSecureToken = nullptr;
         return CDMi_S_FALSE;
     }
   }
