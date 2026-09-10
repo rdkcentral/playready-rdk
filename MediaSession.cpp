@@ -1823,6 +1823,8 @@ CDMi_RESULT MediaKeySession::Decrypt(
       // Token was never handed off downstream, so it must be destroyed here
       // (not just locally freed) or its underlying platform resource leaks.
       svp_buffer_destroy_token(pSecureToken);
+      svp_buffer_free_token(pSecureToken);
+      pSecureToken = nullptr;
     }
 #endif
     return CDMi_S_FALSE;
@@ -1838,6 +1840,7 @@ CDMi_RESULT MediaKeySession::Decrypt(
 
     memcpy((void *)(uint8_t*)pEncryptedDataStart, pSecureToken, svp_token_size());
     svp_buffer_free_token(pSecureToken);
+    pSecureToken = nullptr;
   }
   else
   {
