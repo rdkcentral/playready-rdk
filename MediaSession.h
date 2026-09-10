@@ -243,8 +243,6 @@ public:
     PlayreadySession();
     ~PlayreadySession();
 
-    DRM_APP_CONTEXT *InitializeDRM(const DRM_CONST_STRING * pDRMStoreName);
-
     bool IsPlayreadySessionInit() { return m_bInitCalled; }
 
 protected:
@@ -276,11 +274,6 @@ private:
         IndividualizationRequest = 3
     };
 public:
-
-    MediaKeySession(
-            const uint8_t drmHeader[],
-            uint32_t drmHeaderLength,
-            DRM_APP_CONTEXT * poAppContext, bool initiateChallengeGeneration = false);
 
     MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitData, const uint8_t *f_pbCDMData, uint32_t f_cbCDMData, DRM_APP_CONTEXT * poAppContext, bool initiateChallengeGeneration = false);
     ~MediaKeySession();
