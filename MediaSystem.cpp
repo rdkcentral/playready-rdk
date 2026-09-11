@@ -264,11 +264,6 @@ public:
 
         SafeCriticalSection systemLock(drmAppContextMutex_);
 
-        if (!m_isAppCtxInitialized) {
-            PR_LOG(PR_LOG_ERROR, "App Context is not created yet");
-            return CDMi_FAIL;
-        }
-
         if (m_poAppContext.get() == nullptr) {
             PR_LOG(PR_LOG_ERROR, "App Context is not valid");
             return CDMi_FAIL;
@@ -453,11 +448,6 @@ public:
         if(session == NULL) {
             PR_LOG(PR_LOG_DEBUG, "Invalid input, session is null");
             return CDMi_INVALID_ARG;
-        }
-
-        if (!m_isAppCtxInitialized) {
-            PR_LOG(PR_LOG_ERROR, "App Context is not created yet");
-            return CDMi_FAIL;
         }
 
         if (m_poAppContext.get() == nullptr) {
@@ -800,20 +790,11 @@ public:
         bool bIsInitSecureClockNeed = false;
         CDMi_RESULT cResult = CDMi_S_FALSE;
 
-        PR_LOG(PR_LOG_DEBUG, "entry m_sessionCount[%d] m_isAppCtxInitialized[%d]", m_sessionCount, m_isAppCtxInitialized);
+        PR_LOG(PR_LOG_DEBUG, "entry m_sessionCount[%d]", m_sessionCount);
 
         for(;;) {
-            if(m_isAppCtxInitialized
-                && m_poAppContext.get() == nullptr)
-            {
-                PR_LOG(PR_LOG_ERROR, "App ctx initialized but context is not valid");
-                cResult = CDMi_FAIL;
-                break;
-            }
 
-            if(m_isAppCtxInitialized
-                && m_poAppContext.get() != nullptr)
-            {
+            if(m_poAppContext.get() != nullptr) {
                 PR_LOG(PR_LOG_DEBUG, "AppCtx is already initialized ");
                 cResult = CDMi_SUCCESS;
                 break;
@@ -857,7 +838,6 @@ public:
                 break;
             }
 
-            m_isAppCtxInitialized = true;
             cResult = CDMi_SUCCESS;
             PR_LOG(PR_LOG_DEBUG, "Drm_Initialize success");
 
@@ -888,9 +868,8 @@ public:
         }
 
         if(CDMi_SUCCESS != cResult) {
-            if(m_isAppCtxInitialized) {
+            if(m_poAppContext.get() != nullptr) {
                 Drm_Uninitialize(m_poAppContext.get());
-                m_isAppCtxInitialized = 0;
             }
 
             m_poAppContext.reset();
@@ -911,12 +890,6 @@ public:
         PR_LOG(PR_LOG_DEBUG, "entry sessionCount[%d]", m_sessionCount);
 
         for(;;) {
-            if(!m_isAppCtxInitialized)
-            {
-                PR_LOG(PR_LOG_WARN, "AppCtx is not initialized yet");
-                cResult = CDMi_SUCCESS;
-                break;
-            }
 
             if (m_poAppContext.get() == nullptr)
             {
@@ -939,7 +912,6 @@ public:
                 delete [] pbOldBuf;
             }
 
-            m_isAppCtxInitialized = false;
             cResult = CDMi_SUCCESS;
 
             break;
@@ -1086,10 +1058,10 @@ public:
         DRM_RESULT  dr = DRM_SUCCESS;
         struct stat buf;
 
-        PR_LOG(PR_LOG_DEBUG, "entry isAppCtxInitialized[%d]", m_isAppCtxInitialized);
+        PR_LOG(PR_LOG_DEBUG, "entry");
         SafeCriticalSection systemLock(drmAppContextMutex_);
 
-        if (m_poAppContext.get() != nullptr && m_isAppCtxInitialized)
+        if (m_poAppContext.get() != nullptr)
         {
             PR_LOG(PR_LOG_DEBUG, "call CleanLicenseStore...");
             dr = CleanLicenseStore();
@@ -1210,7 +1182,6 @@ private:
 
     DRM_BYTE *m_pbPublisherCert = nullptr;
     DRM_DWORD m_cbPublisherCert = 0;
-    bool m_isAppCtxInitialized = false;
     uint32_t m_sessionCount = 0;
     uint32_t m_sessionId = 0;
     std::map<uint32_t, IMediaKeySession*> m_sessionMap;

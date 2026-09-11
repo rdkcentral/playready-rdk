@@ -523,20 +523,6 @@ ErrorExit:
     return dr;
 }
 
-PlayreadySession::PlayreadySession() 
-    : m_poAppContext(nullptr)
-    , m_pbPROpaqueBuf(nullptr)
-    , m_cbPROpaqueBuf(0)
-    , m_bInitCalled(false)
-{
-    PR_LOG(PR_LOG_TRACE, "success");
-}
-
-PlayreadySession::~PlayreadySession()
-{
-    PR_LOG(PR_LOG_TRACE, "success");
-}
-
 MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitData, const uint8_t *f_pbCDMData, uint32_t f_cbCDMData, DRM_APP_CONTEXT * poAppContext, bool initiateChallengeGeneration /* = false */)
     : m_pbRevocationBuffer(nullptr)
     , m_eKeyState(KEY_CLOSED)
@@ -558,6 +544,8 @@ MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitD
 #endif
     , m_fCommit(FALSE)
     , m_poAppContext(poAppContext)
+    , m_pbPROpaqueBuf(nullptr)
+    , m_cbPROpaqueBuf(0)
     , m_decryptInited(false)
     , m_bDRMInitializedLocally(false)
 {
