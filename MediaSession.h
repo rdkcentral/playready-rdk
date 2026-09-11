@@ -237,23 +237,7 @@ struct PlayLevels {
     uint16_t uncompressedDigitalAudioLevel_;
 };
 
-class PlayreadySession
-{
-public:
-    PlayreadySession();
-    ~PlayreadySession();
-
-    bool IsPlayreadySessionInit() { return m_bInitCalled; }
-
-protected:
-    DRM_APP_CONTEXT *m_poAppContext;
-
-    DRM_BYTE *m_pbPROpaqueBuf;
-    DRM_DWORD m_cbPROpaqueBuf;
-    bool m_bInitCalled;
-};
-
-class MediaKeySession : public PlayreadySession , public IMediaKeySession , public IMediaKeySessionExt, public IMediaKeySessionBatch {
+class MediaKeySession : public IMediaKeySession , public IMediaKeySessionExt, public IMediaKeySessionBatch {
 private:
     enum KeyState {
         // Has been initialized.
@@ -405,6 +389,8 @@ private:
 protected:
     DRM_BOOL m_fCommit;
     DRM_APP_CONTEXT *m_poAppContext;
+    DRM_BYTE *m_pbPROpaqueBuf;
+    DRM_DWORD m_cbPROpaqueBuf;
     bool m_decryptInited;
     bool m_bDRMInitializedLocally;
 };
