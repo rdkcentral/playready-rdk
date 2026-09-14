@@ -834,6 +834,7 @@ public:
 
             if (DRM_FAILED(err)) {
                 PR_LOG(PR_LOG_ERROR, "Drm_Initialize failed. 0x%X - %s",err,DRM_ERR_NAME(err));
+                m_poAppContext.reset();
                 cResult = CDMi_FAIL;
                 break;
             }
@@ -870,9 +871,9 @@ public:
         if(CDMi_SUCCESS != cResult) {
             if(m_poAppContext.get() != nullptr) {
                 Drm_Uninitialize(m_poAppContext.get());
+                m_poAppContext.reset();
             }
 
-            m_poAppContext.reset();
             delete [] appOpaqueBuffer;
         }
 
