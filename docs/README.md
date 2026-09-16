@@ -278,7 +278,7 @@ sequenceDiagram
     PR->>PR: Resolve current decrypt context by Key ID from sampleInfo
     PR->>SVP: svp_allocate_secure_buffers(pSVPContext, secBufInfo, encData, encDataLen)
     PR->>SVP: svp_buffer_alloc_token() / svp_buffer_to_token()
-    PR->>PRSDK: Drm_Reader_DecryptOpaque / Drm_Reader_DecryptMultipleOpaque\n(decryptContext, ivVector, regionMapping, encData)
+    PR->>PRSDK: Drm_Reader_DecryptMultipleOpaque(decryptContext, ivVector, regionMapping, encData)
     PRSDK-->>PR: decryptedLength, pDecryptedContent (secure handle)
     PR->>SVP: Write secure token to output buffer header
     PR-->>OCDM: CDMi_SUCCESS — output buffer contains SVP token
@@ -315,7 +315,7 @@ The component's interactions are with the WPEFramework OCDM Plugin — OpenCDMi 
 |                                                    | DRM platform and application context lifecycle                                                     | `Drm_Platform_Initialize`, `Drm_Platform_Uninitialize`, `Drm_Initialize`, `Drm_Uninitialize`, `Drm_Reinitialize`                                                           |
 |                                                    | Content header parsing and key selection                                                           | `Drm_Content_SetProperty` with `DRM_CSP_AUTODETECT_HEADER`, `DRM_CSP_SELECT_KID`, `DRM_CSP_DECRYPTION_OUTPUT_MODE`                                                         |
 |                                                    | License acquisition                                                                                | `Drm_LicenseAcq_GenerateChallenge`, `Drm_LicenseAcq_ProcessResponse`                                                                                                       |
-|                                                    | Decrypt context binding and content decryption                                                     | `Drm_Reader_Bind`, `Drm_Reader_Commit`, `Drm_Reader_Close`, `Drm_Reader_DecryptOpaque`, `Drm_Reader_DecryptMultipleOpaque`                                                 |
+|                                                    | Decrypt context binding and content decryption                                                     | `Drm_Reader_Bind`, `Drm_Reader_Commit`, `Drm_Reader_Close`, `Drm_Reader_DecryptMultipleOpaque`                                                                             |
 |                                                    | Revocation data management                                                                         | `Drm_Revocation_SetBuffer`                                                                                                                                                 |
 |                                                    | Secure time and anti-rollback clock                                                                | `Drm_SecureTime_GetValue`, `Drm_AntiRollBackClock_Init`                                                                                                                    |
 |                                                    | Secure Stop session management                                                                     | `Drm_SecureStop_EnumerateSessions`, `Drm_SecureStop_GenerateChallenge`, `Drm_SecureStop_ProcessResponse`                                                                   |
@@ -402,7 +402,6 @@ Called by playready-rdk directly on SoC-provided PlayReady DRM libraries (path: 
 | `Drm_Reader_Bind`                      | Bind a decrypt context to a license for the specified key ID                       | `MediaSession.cpp`, `MediaSessionExt.cpp`                    |
 | `Drm_Reader_Commit`                    | Commit the bound reader context and apply output protection policy                 | `MediaSession.cpp`, `MediaSessionExt.cpp`                    |
 | `Drm_Reader_Close`                     | Release a decrypt context                                                          | `MediaSession.cpp`                                           |
-| `Drm_Reader_DecryptOpaque`             | Decrypt a single-region encrypted buffer into a secure opaque output               | `MediaSession.cpp`                                           |
 | `Drm_Reader_DecryptMultipleOpaque`     | Decrypt a multi-region encrypted buffer supporting multiple IV values              | `MediaSession.cpp`                                           |
 | `Drm_Revocation_SetBuffer`             | Register the revocation data buffer with the application context                   | `MediaSystem.cpp`, `MediaSession.cpp`                        |
 | `Drm_SecureTime_GetValue`              | Read the secure clock value and type from the application context                  | `MediaSystem.cpp`                                            |
@@ -434,11 +433,9 @@ Called by playready-rdk on the `gst-svp-ext` generic interface. GStreamer SVP-sp
   - Core implementation: `MediaSession.cpp`
   - State transition handlers: `MediaSession.cpp` (`Run`, `Update`, `Close`, `playreadyGenerateKeyRequest`)
 
-- **Netflix Key System Path**: `CreateMediaKeySession()` and `CreateMediaKeySessionExt()` detect a Netflix PlayReady key system by checking for the substring `"netflix"` in the key system string. For a Netflix session, the CDMData argument is omitted from the `MediaKeySession` constructor and `initiateChallengeGeneration` is set to `false` (deferring challenge generation to the application). For a non-Netflix session, CDMData is forwarded and challenge generation is initiated immediately. Additionally, `CreateMediaKeySession` defers `InitializeAppCtx()` until the first Netflix session is created if the context has not been initialized yet.
-
 - **Dual Decrypt Context Binding**: Each `__DECRYPT_CONTEXT` holds two `DRM_DECRYPT_CONTEXT` fields. During `Update()`, `BindKeyNow()`, and `SelectKeyId()`, if `svpIsAudioNeedNonSVPContext()` returns true, a second `ReaderBind` is performed with `OEM_TEE_DECRYPTION_MODE_NOT_SECURE` to populate `oDrmDecryptAudioContext`. During `Decrypt()`, the audio context is selected when `useSVP` is false.
 
-- **CBCS Pattern Handling**: In the decrypt path, the `encryptedRegionSkip` vector (passed to `Drm_Reader_DecryptOpaque` / `Drm_Reader_DecryptMultipleOpaque` as skip/pattern data) is populated conditionally: for `AesCbc_Cbcs` scheme the pattern is always pushed even when values are `0:0` (required for audio CBCS), whereas for all other schemes the pattern is only pushed when `encrypted_blocks != 0`.
+- **CBCS Pattern Handling**: In the decrypt path, the `encryptedRegionSkip` vector (passed to `Drm_Reader_DecryptMultipleOpaque` as skip/pattern data) is populated conditionally: for `AesCbc_Cbcs` scheme the pattern is always pushed even when values are `0:0` (required for audio CBCS), whereas for all other schemes the pattern is only pushed when `encrypted_blocks != 0`.
 
 - **Event Processing**: Events are dispatched synchronously to `IMediaKeySessionCallback` from within `Update()`, `playreadyGenerateKeyRequest()`, and error paths. Key status strings (`"KeyUsable"`, `"KeyOutputRestricted"`, `"KeyOutputRestrictedHDCP"`, `"KeyOutputRestrictedHDCP22"`, `"LicenseExpired"`, `"LicenseNotFound"`, `"KeyInternalError"`) are mapped from `DRM_RESULT` values through `MapDrToKeyMessage()` in `MediaSession.cpp`.
 
