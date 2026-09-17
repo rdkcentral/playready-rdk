@@ -1756,6 +1756,7 @@ CDMi_RESULT MediaKeySession::Decrypt(
         // Free decrypted secure buffer.
         svp_release_secure_buffers(m_pSVPContext, (void*)&m_stSecureBuffInfo, (void*)m_stSecureBuffInfo.pAVSecBuffer , nullptr, 0);
         svp_buffer_free_token(pSecureToken);
+        pSecureToken = nullptr;
         return CDMi_S_FALSE;
     }
   }
@@ -1820,7 +1821,11 @@ CDMi_RESULT MediaKeySession::Decrypt(
       m_stSecureBuffInfo.bReleaseSecureMemRegion = false;
       // Free decrypted secure buffer.
       svp_release_secure_buffers(m_pSVPContext, (void*)&m_stSecureBuffInfo, (void*)m_stSecureBuffInfo.pAVSecBuffer , nullptr, 0);
+      // Token was never handed off downstream, so it must be destroyed here
+      // (not just locally freed) or its underlying platform resource leaks.
+      svp_buffer_destroy_token(pSecureToken);
       svp_buffer_free_token(pSecureToken);
+      pSecureToken = nullptr;
     }
 #endif
     return CDMi_S_FALSE;
@@ -1836,6 +1841,7 @@ CDMi_RESULT MediaKeySession::Decrypt(
 
     memcpy((void *)(uint8_t*)pEncryptedDataStart, pSecureToken, svp_token_size());
     svp_buffer_free_token(pSecureToken);
+    pSecureToken = nullptr;
   }
   else
   {
