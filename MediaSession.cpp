@@ -1576,6 +1576,18 @@ CDMi_RESULT MediaKeySession::Decrypt(
         uint8_t**                outData,
         uint32_t*                outDataLength,
         const SampleInfo*        sampleInfo,
+        const IStreamProperties* properties)
+{
+    const uint16_t sampleCount{1};
+    return DecryptMulti(inData, inDataLength, outData, outDataLength, sampleInfo, sampleCount, properties);
+}
+
+CDMi_RESULT MediaKeySession::DecryptMulti(
+        uint8_t*                 inData,
+        const uint32_t           inDataLength,
+        uint8_t**                outData,
+        uint32_t*                outDataLength,
+        const SampleInfo*        sampleInfo,
         const uint16_t           sampleCount,
         const IStreamProperties* properties)
 {

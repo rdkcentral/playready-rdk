@@ -305,6 +305,13 @@ public:
         uint8_t**                outData,
         uint32_t*                outDataLength,
         const SampleInfo*        sampleInfo,
+        const IStreamProperties* properties);
+    virtual CDMi_RESULT DecryptMulti(
+        uint8_t*                 inData,
+        const uint32_t           inDataLength,
+        uint8_t**                outData,
+        uint32_t*                outDataLength,
+        const SampleInfo*        sampleInfo,
         const uint16_t           sampleCount,
         const IStreamProperties* properties);
 
