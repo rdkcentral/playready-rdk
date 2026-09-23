@@ -1608,7 +1608,10 @@ CDMi_RESULT MediaKeySession::DecryptMulti(
     DRM_DWORD decryptedLength = 0;
     DRM_BYTE* pDecryptedContent = NULL;
     DRM_BYTE* pEncryptedData = NULL;
+    bool bIsAudioNeedNonSVPContext;
+    DRM_DECRYPT_CONTEXT *pDecCtxToUse = nullptr;
 
+    PR_LOG(PR_LOG_TRACE, "entry");
     PR_LOG(PR_LOG_TRACE, "inDataLength[%u]", inDataLength);
 
     if(sampleInfo == NULL || sampleCount == 0) {
@@ -1776,29 +1779,32 @@ CDMi_RESULT MediaKeySession::DecryptMulti(
         pEncryptedData = pEncryptedDataStart;
     }
 
-    {
-        DRM_DECRYPT_CONTEXT *decCtxToUse = &(m_currentDecryptContext->oDrmDecryptContext);
-        bool bIsAudioNeedNonSVPContext = svpIsAudioNeedNonSVPContext();
-        if (!useSVP && bIsAudioNeedNonSVPContext) {
-            decCtxToUse = &(m_currentDecryptContext->oDrmDecryptAudioContext);
-        }
+    bIsAudioNeedNonSVPContext = svpIsAudioNeedNonSVPContext();
 
-        PR_LOG(PR_LOG_TRACE, "Audio needs non SVP context: [%u], use SVP: [%u]", bIsAudioNeedNonSVPContext, useSVP);
+    PR_LOG(PR_LOG_TRACE, "bIsAudioNeedNonSVPContext [%u] useSVP[%u]",
+                                          bIsAudioNeedNonSVPContext,
+                                          useSVP);
+    pDecCtxToUse = &(m_currentDecryptContext->oDrmDecryptContext);
 
-        err = Drm_Reader_DecryptMultipleOpaque(decCtxToUse,
-                        ivsHigh.size(),
-                        ivsHigh.data(),
-                        ivsLow.data(),
-                        encryptedRegionCounts.data(),
-                        encryptedRegionMapping.size(),
-                        encryptedRegionMapping.data(),
-                        encryptedRegionSkip.size(),
-                        encryptedRegionSkip.empty() ? nullptr : encryptedRegionSkip.data(),
-                        (DRM_DWORD) actualEncDataLength,
-                        (DRM_BYTE *) pEncryptedData,
-                        &decryptedLength,
-                        &pDecryptedContent);
+    if (!useSVP && bIsAudioNeedNonSVPContext) {
+        pDecCtxToUse = &(m_currentDecryptContext->oDrmDecryptAudioContext);
     }
+
+    PR_LOG(PR_LOG_TRACE, "Audio needs non SVP context: [%u], use SVP: [%u]", bIsAudioNeedNonSVPContext, useSVP);
+
+    err = Drm_Reader_DecryptMultipleOpaque(pDecCtxToUse,
+                    ivsHigh.size(),
+                    ivsHigh.data(),
+                    ivsLow.data(),
+                    encryptedRegionCounts.data(),
+                    encryptedRegionMapping.size(),
+                    encryptedRegionMapping.data(),
+                    encryptedRegionSkip.size(),
+                    encryptedRegionSkip.empty() ? nullptr : encryptedRegionSkip.data(),
+                    (DRM_DWORD) actualEncDataLength,
+                    (DRM_BYTE *) pEncryptedData,
+                    &decryptedLength,
+                    &pDecryptedContent);
 
     if (DRM_FAILED(err)) {
 
@@ -1829,6 +1835,7 @@ CDMi_RESULT MediaKeySession::DecryptMulti(
         }
 
         if(NULL != pDecryptedContent) {
+        PR_LOG(PR_LOG_TRACE, "decryptedLength[%u] actualEncDataLength[%u] ",decryptedLength, actualEncDataLength);
             if ((size_t)decryptedLength > actualEncDataLength) {
                 free(pDecryptedContent);
                 pDecryptedContent = NULL;
@@ -1850,6 +1857,7 @@ CDMi_RESULT MediaKeySession::DecryptMulti(
 
     if (!m_fCommit) {
         err = Drm_Reader_Commit(m_poAppContext, _PolicyCallback, &m_playreadyLevels);
+        PR_LOG(PR_LOG_WARN, "Drm_Reader_Commit result. 0x%X - %s",err,DRM_ERR_NAME(err));
         m_fCommit = TRUE;
     }
 
