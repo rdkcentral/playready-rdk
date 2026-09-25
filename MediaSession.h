@@ -253,7 +253,7 @@ protected:
     bool m_bInitCalled;
 };
 
-class MediaKeySession : public PlayreadySession , public IMediaKeySession , public IMediaKeySessionExt {
+class MediaKeySession : public PlayreadySession , public IMediaKeySession , public IMediaKeySessionExt, public IMediaKeySessionBatch {
 private:
     enum KeyState {
         // Has been initialized.
@@ -324,7 +324,15 @@ public:
     virtual CDMi_RESULT SelectKeyId(const uint8_t keyLength, const uint8_t keyId[]);
     virtual CDMi_RESULT CleanDecryptContext();
     
-    
+    // ----- CDMi::IMediaKeySessionBatch
+    CDMi_RESULT DecryptMulti(
+        uint8_t*                 inData,
+        const uint32_t           inDataLength,
+        uint8_t**                outData,
+        uint32_t*                outDataLength,
+        const SampleInfo*        sampleInfo,
+        const uint16_t           sampleCount,
+        const IStreamProperties* properties);
 
 private:
     std::vector< DECRYPT_CONTEXT > m_DecryptContextVector;
