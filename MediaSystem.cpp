@@ -796,6 +796,7 @@ public:
     CDMi_RESULT InitializeAppCtx()
     {
         DRM_BYTE *appOpaqueBuffer = nullptr;
+        DRM_BYTE *appOpaqueBuffer1 = nullptr;
         DRM_VOID *pDrmOemContext = NULL;
         bool bIsInitSecureClockNeed = false;
         CDMi_RESULT cResult = CDMi_S_FALSE;
@@ -861,6 +862,46 @@ public:
             cResult = CDMi_SUCCESS;
             PR_LOG(PR_LOG_DEBUG, "Drm_Initialize success");
 
+            /* Reproduce RDKDEV-1308: re-create the app context right after
+             * Drm_Uninitialize(), without CPRDrmPlatform::DrmPlatformUninitialize().
+             */
+            {
+                PR_LOG(PR_LOG_DEBUG, "call Drm_Uninitialize before second Drm_Initialize");
+                Drm_Uninitialize(m_poAppContext.get());
+                m_isAppCtxInitialized = false;
+
+                m_poAppContext.reset();
+                delete [] appOpaqueBuffer;
+                appOpaqueBuffer = nullptr;
+
+                appOpaqueBuffer1 = new DRM_BYTE[MINIMUM_APPCONTEXT_OPAQUE_BUFFER_SIZE];
+
+                m_poAppContext.reset(new DRM_APP_CONTEXT);
+                ::memset(m_poAppContext.get(), 0, sizeof(DRM_APP_CONTEXT));
+
+                svpGetDrmOEMContext(&pDrmOemContext);
+
+                PR_LOG(PR_LOG_DEBUG, "call Drm_Initialize (second time)");
+
+                err = Drm_Initialize(m_poAppContext.get(), pDrmOemContext,
+                                    appOpaqueBuffer1,
+                                    MINIMUM_APPCONTEXT_OPAQUE_BUFFER_SIZE,
+                                    &g_dstrCDMDrmStoreName);
+
+                PR_LOG(PR_LOG_DEBUG, "Second - Drm_Initialize Return. 0x%X - %s",err,DRM_ERR_NAME(err));
+
+                /* ownership of the live opaque buffer moves to the second context */
+                appOpaqueBuffer = appOpaqueBuffer1;
+                appOpaqueBuffer1 = nullptr;
+
+                if (DRM_FAILED(err)) {
+                    cResult = CDMi_FAIL;
+                    break;
+                }
+
+                m_isAppCtxInitialized = true;
+            }
+
             ::memset(pbRevocationBuffer_, 0, REVOCATION_BUFFER_SIZE);
             err = Drm_Revocation_SetBuffer(m_poAppContext.get(), pbRevocationBuffer_, REVOCATION_BUFFER_SIZE);
             if(DRM_FAILED(err)) {
@@ -895,6 +936,7 @@ public:
 
             m_poAppContext.reset();
             delete [] appOpaqueBuffer;
+            delete [] appOpaqueBuffer1;
         }
 
         PR_LOG(PR_LOG_DEBUG, "exit cResult[0x%X]", cResult);
