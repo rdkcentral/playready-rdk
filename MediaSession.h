@@ -259,7 +259,7 @@ private:
     };
 public:
 
-    MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitData, const uint8_t *f_pbCDMData, uint32_t f_cbCDMData, DRM_APP_CONTEXT * poAppContext, bool initiateChallengeGeneration = false);
+    MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitData, const uint8_t *f_pbCDMData, uint32_t f_cbCDMData, DRM_APP_CONTEXT * poAppContext, bool initiateChallengeGeneration = false, std::function<void()> releaseAppContext = nullptr);
     ~MediaKeySession();
 
     bool playreadyGenerateKeyRequest();
@@ -391,6 +391,7 @@ protected:
     DRM_APP_CONTEXT *m_poAppContext;
     DRM_BYTE *m_pbPROpaqueBuf;
     DRM_DWORD m_cbPROpaqueBuf;
+    std::function<void()> m_releaseAppContext;
     bool m_decryptInited;
     bool m_bDRMInitializedLocally;
 };

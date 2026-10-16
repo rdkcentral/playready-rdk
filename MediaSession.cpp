@@ -523,7 +523,7 @@ ErrorExit:
     return dr;
 }
 
-MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitData, const uint8_t *f_pbCDMData, uint32_t f_cbCDMData, DRM_APP_CONTEXT * poAppContext, bool initiateChallengeGeneration /* = false */)
+MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitData, const uint8_t *f_pbCDMData, uint32_t f_cbCDMData, DRM_APP_CONTEXT * poAppContext, bool initiateChallengeGeneration /* = false */, std::function<void()> releaseAppContext /* = nullptr */)
     : m_pbRevocationBuffer(nullptr)
     , m_eKeyState(KEY_CLOSED)
     , m_pbChallenge(nullptr)
@@ -546,6 +546,7 @@ MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitD
     , m_poAppContext(poAppContext)
     , m_pbPROpaqueBuf(nullptr)
     , m_cbPROpaqueBuf(0)
+    , m_releaseAppContext(std::move(releaseAppContext))
     , m_decryptInited(false)
     , m_bDRMInitializedLocally(false)
 {
@@ -681,6 +682,9 @@ MediaKeySession::~MediaKeySession(void)
     mMaxResDecodePixels = 0;
     mMaxResDecodeSet = false;
     Close();
+    if (m_releaseAppContext) {
+        m_releaseAppContext();
+    }
     PR_LOG(PR_LOG_DEBUG, "exit");
 }
 
