@@ -524,8 +524,7 @@ ErrorExit:
 }
 
 MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitData, const uint8_t *f_pbCDMData, uint32_t f_cbCDMData, DRM_APP_CONTEXT * poAppContext, bool initiateChallengeGeneration /* = false */, std::function<void()> releaseAppContext /* = nullptr */)
-    : m_pbRevocationBuffer(nullptr)
-    , m_eKeyState(KEY_CLOSED)
+    : m_eKeyState(KEY_CLOSED)
     , m_pbChallenge(nullptr)
     , m_cbChallenge(0)
     , m_pchSilentURL(nullptr) 
@@ -585,14 +584,6 @@ MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitD
         goto ErrorExit;
     }
 
-    if (DRM_REVOCATION_IsRevocationSupported()) {
-        PR_LOG(PR_LOG_INFO, "DRM Revocation is Supported");
-        ChkMem(m_pbRevocationBuffer = (DRM_BYTE *)Oem_MemAlloc(REVOCATION_BUFFER_SIZE));
-
-        ChkDR(Drm_Revocation_SetBuffer(m_poAppContext,
-                                    m_pbRevocationBuffer,
-                                    REVOCATION_BUFFER_SIZE));
-    }
         
     ChkDR(Oem_Random_GetBytes(nullptr, (DRM_BYTE *)&oSessionID, SIZEOF(oSessionID)));
     ZEROMEM(m_rgchSessionID, SIZEOF(m_rgchSessionID));
@@ -1463,8 +1454,6 @@ CDMi_RESULT MediaKeySession::Close(void) {
         DeleteTemporaryPersistentLicenses();
 
         mDrmHeader.clear();
-
-        SAFE_OEM_FREE(m_pbRevocationBuffer);
 
         SAFE_OEM_FREE(m_pdstrHeaderKIDs);
 

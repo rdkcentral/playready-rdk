@@ -43,6 +43,7 @@
 #include <memory>
 #include <cdmi.h>
 #include <core/Sync.h>
+#include <functional>
 
 #ifdef USE_SVP
 #include "gst_svp_meta.h"
@@ -333,7 +334,6 @@ private:
             const DRM_LID *, const DRM_VOID *);
 
  
-    DRM_BYTE *m_pbRevocationBuffer;
     KeyState m_eKeyState;
     DRM_CHAR m_rgchSessionID[CCH_BASE64_EQUIV(SIZEOF(DRM_ID)) + 1];
       

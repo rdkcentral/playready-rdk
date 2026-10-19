@@ -26,6 +26,7 @@
 #include <core/core.h>
 
 #include <drmint64.h>
+#include <unordered_map>
 
 #define CLEAN_ON_INIT 1
 
@@ -133,7 +134,8 @@ public:
                 PR_LOG(PR_LOG_WARN, "Drm_GetOpaqueBuffer failed. 0x%X - %s", err, DRM_ERR_NAME(err));
             }
             Drm_Uninitialize(&m_appCtx);
-            delete [] pbOldBuf;
+            delete [] (pbOldBuf != nullptr ? pbOldBuf : m_appOpaqueBuffer);
+            m_appOpaqueBuffer = nullptr;
         }
         delete [] m_storeWchar;
     }
@@ -192,7 +194,7 @@ private:
 
     std::shared_ptr<KeySystemCtx> AcquireKeySystemCtx(const std::string& keySystem)
     {
-        PR_LOG(PR_LOG_DEBUG, "entry");
+        PR_LOG(PR_LOG_DEBUG, "entry keySystem[%s]", keySystem.c_str());
 		
         auto existingCtx = m_keySystemCtxs.find(keySystem);
         if (existingCtx != m_keySystemCtxs.end()) {
@@ -218,7 +220,7 @@ private:
 
     void ReleaseKeySystemCtx(const std::string& keySystem)
     {
-        PR_LOG(PR_LOG_DEBUG, "entry");
+        PR_LOG(PR_LOG_DEBUG, "entry keySystem[%s]", keySystem.c_str());
 		
         auto keySystemCtx = m_keySystemCtxs.find(keySystem);
         if (keySystemCtx == m_keySystemCtxs.end()) {
@@ -284,7 +286,7 @@ private:
         PR_LOG(PR_LOG_DEBUG, "exit");
     }
 
-    const std::string getStoreLocation(const std::string& keySystem)
+    const std::string getStoreLocation(const std::string& keySystem) const
     {
         std::string dir = m_storeLocation.substr(0, m_storeLocation.find_last_of("/"));
         std::string filename = m_storeLocation.substr(m_storeLocation.find_last_of("/") + 1);
@@ -1250,7 +1252,7 @@ public:
         const std::string storeLocation = getStoreLocation(keySystem);
         FILE* const file = fopen(storeLocation.c_str(), "rb");
         if (!file) {
-            PR_LOG(PR_LOG_ERROR, "exit. file open failed [%s]", m_storeLocation.c_str());
+            PR_LOG(PR_LOG_ERROR, "exit. file open failed [%s]", storeLocation.c_str());
              return CDMi_S_FALSE;
         }
 
