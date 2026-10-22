@@ -52,7 +52,7 @@ using namespace std;
 struct KeySystemCtx
 {
     DRM_APP_CONTEXT drmAppctx{};
-    DRM_BYTE* pbRevocationBuffer{};
+    DRM_BYTE *pbRevocationBuffer{};
     int32_t mediaKeySessionsCount{};
 };
 
@@ -139,9 +139,9 @@ private:
     PlayReady (const PlayReady&) = delete;
     PlayReady& operator= (const PlayReady&) = delete;
 
-    KeySystemCtx* AcquireKeySystemCtx(const std::string& keySystem) const
+    KeySystemCtx* AcquireKeySystemCtx(const std::string &keySystem) const
     {
-        KeySystemCtx* keySystemCtx = nullptr;
+        KeySystemCtx *keySystemCtx = nullptr;
 
         auto it = m_keySystemCtxs.find(keySystem);
         if (it != m_keySystemCtxs.end()) {
@@ -164,7 +164,7 @@ private:
         return keySystemCtx;
     }
 
-    void ReleaseKeySystemCtx(const std::string& keySystem) const
+    void ReleaseKeySystemCtx(const std::string &keySystem) const
     {		
         auto keySystemCtx = m_keySystemCtxs.find(keySystem);
         if (keySystemCtx == m_keySystemCtxs.end()) {
@@ -187,9 +187,9 @@ private:
     void CleanLicenseStore()
     {
         std::vector<std::string> storeFilePaths;
-        DIR* dir = opendir(m_readDir.c_str());
+        DIR *dir = opendir(m_readDir.c_str());
         if (dir) {
-            struct dirent* dir_entry{};
+            struct dirent *dir_entry{};
             while ((dir_entry = readdir(dir)) != NULL) {
                 if (strcmp(dir_entry->d_name, ".") && strcmp(dir_entry->d_name, "..")) {
                     std::string filePath = m_readDir;
@@ -203,7 +203,7 @@ private:
             closedir(dir);
         }
 
-        for (const auto& storeFilePath : storeFilePaths) {
+        for (const auto &storeFilePath : storeFilePaths) {
             KeySystemCtx storeCtx;
             CDMi_RESULT cResult = InitializeAppCtx(storeFilePath, storeCtx);
             if (cResult == CDMi_SUCCESS) {
@@ -220,7 +220,7 @@ private:
         }
     }
 
-    const std::string getStoreLocation(const std::string& keySystem) const
+    const std::string getStoreLocation(const std::string &keySystem) const
     {
         return m_storeLocation + "_" + keySystem;
     }
@@ -234,7 +234,7 @@ public:
         SAFE_OEM_FREE( m_pbPublisherCert );
     }
 
-    CDMi_RESULT UpdateDrmClock(DRM_APP_CONTEXT* appContext) const
+    CDMi_RESULT UpdateDrmClock(DRM_APP_CONTEXT *appContext) const
     {
         DRMFILETIME               ftSystemTime; /* Initialized by Drm_SecureTime_GetValue */
         DRM_SECURETIME_CLOCK_TYPE eClockType;   /* Initialized by Drm_SecureTime_GetValue */
@@ -255,7 +255,7 @@ public:
             }
 
             PR_LOG(PR_LOG_DEBUG, "Drm_SecureTime_GetValue calling...");
-            dr = Drm_SecureTime_GetValue( appContext, &ftSystemTime, &eClockType  );
+            dr = Drm_SecureTime_GetValue(appContext, &ftSystemTime, &eClockType);
             if (dr == DRM_E_CLK_NOT_SUPPORTED)  /* Secure Clock not supported, try the Anti-Rollback Clock */
             {
                 PR_LOG(PR_LOG_WARN, "Drm_SecureTime_GetValue return 0x%X - %s",dr,DRM_ERR_NAME(dr));
@@ -334,10 +334,7 @@ public:
             return CDMi_FAIL;
         }
 
-        *f_ppiMediaKeySession = new CDMi::MediaKeySession(f_pbInitData, f_cbInitData, f_pbCDMData, f_cbCDMData, &keySystemCtx->drmAppctx, [this, keySystem]() {
-            SafeCriticalSection systemLock(drmAppContextMutex_);
-            ReleaseKeySystemCtx(keySystem);
-        });
+        *f_ppiMediaKeySession = new CDMi::MediaKeySession(f_pbInitData, f_cbInitData, f_pbCDMData, f_cbCDMData, &keySystemCtx->drmAppctx, keySystem);
 
         /* Store the MediaKeySession with random generated SessionId */
         do {
@@ -348,6 +345,7 @@ public:
             PR_LOG(PR_LOG_ERROR, "Failed to generate sessionId");
             delete *f_ppiMediaKeySession;
             *f_ppiMediaKeySession = nullptr;
+            ReleaseKeySystemCtx(keySystem);
             return CDMi_FAIL;
         }
         m_sessionMap.emplace(m_sessionId, *f_ppiMediaKeySession);
@@ -439,7 +437,9 @@ public:
                 {
                     sessionFound = true;
                     PR_LOG(PR_LOG_DEBUG, "Found the session[%p] Id[%u] from sessionMap", f_piMediaKeySession, sessionId);
+                    const std::string keySystem = session->GetKeySystem();
                     delete session;
+                    ReleaseKeySystemCtx(keySystem);
                     /* remove the sessionId mapping from the sessionMap list */
                     m_sessionMap.erase(sessionId);
 
@@ -463,7 +463,7 @@ public:
         return cResult;
     }
     
-    uint64_t GetDrmSystemTime(const std::string& keySystem) const /* override */
+    uint64_t GetDrmSystemTime(const std::string &keySystem) const /* override */
     {
         DRM_RESULT dr                        = DRM_SUCCESS;
         DRM_SECURETIME_CLOCK_TYPE eClockType = DRM_SECURETIME_CLOCK_TYPE_INVALID;
@@ -525,10 +525,7 @@ public:
             return CDMi_FAIL;
         }
 
-        *session = new CDMi::MediaKeySession(drmHeader, drmHeaderLength, nullptr, 0, &keySystemCtx->drmAppctx, [this, keySystem]() {
-            SafeCriticalSection systemLock(drmAppContextMutex_);
-            ReleaseKeySystemCtx(keySystem);
-        });
+        *session = new CDMi::MediaKeySession(drmHeader, drmHeaderLength, nullptr, 0, &keySystemCtx->drmAppctx, keySystem);
 
         /* Store the MediaKeySession with random generated SessionId */
         do {
@@ -539,6 +536,7 @@ public:
             PR_LOG(PR_LOG_ERROR, "Failed to generate sessionId");
             delete *session;
             *session = nullptr;
+            ReleaseKeySystemCtx(keySystem);
             return CDMi_FAIL;
         }
         m_sessionMap.emplace(m_sessionId, reinterpret_cast<IMediaKeySession*>(*session));
@@ -585,7 +583,9 @@ public:
                 {
                     sessionFound = true;
                     PR_LOG(PR_LOG_DEBUG, "Found the session[0x%X] Id[%u] from sessionMap", f_piMediaKeySession, sessionId);
+                    const std::string keySystem = session->GetKeySystem();
                     delete session;
+                    ReleaseKeySystemCtx(keySystem);
                     /* remove the sessionId mapping from the sessionMap list */
                     m_sessionMap.erase(sessionId);
 
@@ -667,7 +667,7 @@ public:
     }
 
     /*Return a list of the current SecureStop sessions.*/
-    CDMi_RESULT GetSecureStopIds(const std::string& keySystem, uint8_t ids[], uint16_t idsLength, uint32_t & count)
+    CDMi_RESULT GetSecureStopIds(const std::string &keySystem, uint8_t ids[], uint16_t idsLength, uint32_t & count)
     {
         PR_LOG(PR_LOG_DEBUG, "entry");
         SafeCriticalSection lock(drmAppContextMutex_);
@@ -725,7 +725,7 @@ public:
 
     /*Generate a SecureStop challenge to send to the server.*/
     CDMi_RESULT GetSecureStop(
-            const std::string& keySystem,
+            const std::string &keySystem,
             const uint8_t sessionID[],
             uint32_t sessionIDLength,
             uint8_t * f_pbChallenge,
@@ -800,7 +800,7 @@ public:
 
     /*Process the response from the SecureStop server.*/
     CDMi_RESULT CommitSecureStop(
-            const std::string& keySystem,
+            const std::string &keySystem,
             const uint8_t f_sessionID[],
             uint32_t f_sessionIDLength,
             const uint8_t f_serverResponse[],
@@ -846,7 +846,7 @@ public:
         {
             cr = CDMi_S_FALSE;
         }
-        else if ( err != DRM_SUCCESS )
+        else if (err != DRM_SUCCESS)
         {
             PR_LOG(PR_LOG_ERROR, " Drm_SecureStop_ProcessResponse failed. 0x%X - %s",err,DRM_ERR_NAME(err));
             cr = CDMi_S_FALSE;
@@ -877,7 +877,7 @@ public:
     }
 
     /*Initialize the PlayReady application context*/
-    CDMi_RESULT InitializeAppCtx(const std::string& storeLocation, KeySystemCtx& keySystemCtx) const
+    CDMi_RESULT InitializeAppCtx(const std::string &storeLocation, KeySystemCtx &keySystemCtx) const
     {
         DRM_BYTE *appOpaqueBuffer = nullptr;
         DRM_VOID *pDrmOemContext = NULL;
@@ -974,7 +974,7 @@ public:
     }
 
     /*Unitialize the playready context and opaque buffer*/
-    CDMi_RESULT UninitializeAppCtx(KeySystemCtx& keySystemCtx) const
+    CDMi_RESULT UninitializeAppCtx(KeySystemCtx &keySystemCtx) const
     {
         DRM_BYTE *pbOldBuf = nullptr;
         DRM_DWORD cbOldBuf = 0;
@@ -1064,13 +1064,17 @@ public:
             if (session != nullptr)
             {
                 PR_LOG(PR_LOG_INFO, "Close the session sessionId[%d]", sessionId);
+                const std::string keySystem = session->GetKeySystem();
                 delete session;
+                ReleaseKeySystemCtx(keySystem);
             }
         }
 
         m_sessionMap.clear();
         m_sessionCount = 0;
-        m_keySystemCtxs.clear();
+        if (!m_keySystemCtxs.empty()) {
+            PR_LOG(PR_LOG_ERROR, "Key system contexts not released properly");
+        }
 
         delete [] drmdir_;
 
@@ -1093,7 +1097,7 @@ public:
         return CDMi_S_FALSE;
     }
 
-    CDMi_RESULT DeleteSecureStore(const std::string& keySystem) /* override */
+    CDMi_RESULT DeleteSecureStore(const std::string &keySystem) /* override */
     {
         CDMi_RESULT cr = CDMi_SUCCESS;
         DRM_RESULT  dr = DRM_SUCCESS;
@@ -1133,7 +1137,7 @@ public:
     }
 
     CDMi_RESULT GetSecureStoreHash(
-            const std::string& keySystem,
+            const std::string &keySystem,
             uint8_t secureStoreHash[],
             uint32_t secureStoreHashLength) // override
     {

@@ -31,8 +31,6 @@
 extern WPEFramework::Core::CriticalSection drmAppContextMutex_;
 extern DRM_CONST_STRING g_dstrCDMDrmStoreName;
 
-#define NYI_KEYSYSTEM "keysystem-placeholder"
-
 #ifdef DRM_WCHAR_CAST
 #define WCHAR_CAST DRM_WCHAR_CAST
 #endif
@@ -523,7 +521,7 @@ ErrorExit:
     return dr;
 }
 
-MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitData, const uint8_t *f_pbCDMData, uint32_t f_cbCDMData, DRM_APP_CONTEXT * poAppContext, std::function<void()> releaseAppContext)
+MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitData, const uint8_t *f_pbCDMData, uint32_t f_cbCDMData, DRM_APP_CONTEXT * poAppContext, const std::string &keySystem)
     : m_eKeyState(KEY_CLOSED)
     , m_pbChallenge(nullptr)
     , m_cbChallenge(0)
@@ -545,7 +543,7 @@ MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitD
     , m_poAppContext(poAppContext)
     , m_pbPROpaqueBuf(nullptr)
     , m_cbPROpaqueBuf(0)
-    , m_releaseAppContext(std::move(releaseAppContext))
+    , m_keySystem(keySystem)
     , m_decryptInited(false)
     , m_bDRMInitializedLocally(false)
 {
@@ -673,9 +671,6 @@ MediaKeySession::~MediaKeySession(void)
     mMaxResDecodePixels = 0;
     mMaxResDecodeSet = false;
     Close();
-    if (m_releaseAppContext) {
-        m_releaseAppContext();
-    }
     PR_LOG(PR_LOG_DEBUG, "exit");
 }
 
@@ -698,7 +693,7 @@ const char *MediaKeySession::GetSessionId(void) const {
 }
 
 const char *MediaKeySession::GetKeySystem(void) const {
-  return NYI_KEYSYSTEM;
+    return m_keySystem.c_str();
 }
 
 DRM_RESULT DRM_CALL MediaKeySession::_PolicyCallback(

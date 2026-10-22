@@ -43,7 +43,6 @@
 #include <memory>
 #include <cdmi.h>
 #include <core/Sync.h>
-#include <functional>
 
 #ifdef USE_SVP
 #include "gst_svp_meta.h"
@@ -260,7 +259,7 @@ private:
     };
 public:
 
-    MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitData, const uint8_t *f_pbCDMData, uint32_t f_cbCDMData, DRM_APP_CONTEXT * poAppContext, std::function<void()> releaseAppContext);
+    MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitData, const uint8_t *f_pbCDMData, uint32_t f_cbCDMData, DRM_APP_CONTEXT * poAppContext, const std::string &keySystem);
     ~MediaKeySession();
 
     bool playreadyGenerateKeyRequest();
@@ -391,7 +390,7 @@ protected:
     DRM_APP_CONTEXT *m_poAppContext;
     DRM_BYTE *m_pbPROpaqueBuf;
     DRM_DWORD m_cbPROpaqueBuf;
-    std::function<void()> m_releaseAppContext;
+    std::string m_keySystem;
     bool m_decryptInited;
     bool m_bDRMInitializedLocally;
 };
