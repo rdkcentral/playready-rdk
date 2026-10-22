@@ -260,7 +260,7 @@ private:
     };
 public:
 
-    MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitData, const uint8_t *f_pbCDMData, uint32_t f_cbCDMData, DRM_APP_CONTEXT * poAppContext, std::function<void()> releaseAppContext = nullptr);
+    MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitData, const uint8_t *f_pbCDMData, uint32_t f_cbCDMData, DRM_APP_CONTEXT * poAppContext, std::function<void()> releaseAppContext);
     ~MediaKeySession();
 
     bool playreadyGenerateKeyRequest();

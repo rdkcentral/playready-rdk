@@ -168,7 +168,7 @@ private:
     {		
         auto keySystemCtx = m_keySystemCtxs.find(keySystem);
         if (keySystemCtx == m_keySystemCtxs.end()) {
-            PR_LOG(PR_LOG_WARN, "No AppCtx found for keySystem[%s]", keySystem.c_str());
+            PR_LOG(PR_LOG_WARN, "No context found for keySystem[%s]", keySystem.c_str());
             return;
         }
 
@@ -521,7 +521,7 @@ public:
 
         auto keySystemCtx = AcquireKeySystemCtx(keySystem);
         if (keySystemCtx == nullptr) {
-            PR_LOG(PR_LOG_ERROR, "App Context is not valid for keySystem[%s]", keySystem.c_str());
+            PR_LOG(PR_LOG_ERROR, "No valid context available for keySystem[%s]", keySystem.c_str());
             return CDMi_FAIL;
         }
 
@@ -676,7 +676,6 @@ public:
         DRM_ID     *pidSessions  = NULL;
         DRM_DWORD   cidSessions  = 0;
         DRM_DWORD   cBytesNeeded = 0;
-        DRM_RESULT  err          = DRM_SUCCESS;
 
         ErrCheckCert();
 
@@ -686,13 +685,13 @@ public:
             return CDMi_S_FALSE;
         }
 
-        err = Drm_SecureStop_EnumerateSessions(
-                            &keySystemCtx->drmAppctx,
-                            m_cbPublisherCert,
-                            m_pbPublisherCert,
-                            &cidSessions,
-                            &pidSessions );
-
+        DRM_RESULT err = Drm_SecureStop_EnumerateSessions(
+                &keySystemCtx->drmAppctx,
+                m_cbPublisherCert,
+                m_pbPublisherCert,
+                &cidSessions,
+                &pidSessions );
+        
         ReleaseKeySystemCtx(keySystem);
 
         if ( err == DRM_SUCCESS )
@@ -751,29 +750,28 @@ public:
 
         ErrCheckCert();
 
-        DRM_BYTE   *pbChallenge = NULL;
-        DRM_DWORD   cbChallenge = 0;
-        DRM_ID      SID         = DRM_ID_EMPTY;
-        CDMi_RESULT cr          = CDMi_SUCCESS;
-        DRM_RESULT  err         = DRM_SUCCESS;
-
-        ::memcpy( (void*)SID.rgb, (const void*)&sessionID[0], DRM_ID_SIZE );
-
         auto keySystemCtx = AcquireKeySystemCtx(keySystem);
         if (keySystemCtx == nullptr) {
             PR_LOG(PR_LOG_ERROR, "No valid context available for keySystem[%s]", keySystem.c_str());
             return CDMi_S_FALSE;
         }
 
-        err = Drm_SecureStop_GenerateChallenge(
-                            &keySystemCtx->drmAppctx,
-                            &SID,
-                            m_cbPublisherCert,
-                            m_pbPublisherCert,
-                            0,
-                            nullptr,
-                            &cbChallenge,
-                            &pbChallenge );
+        DRM_BYTE   *pbChallenge = NULL;
+        DRM_DWORD   cbChallenge = 0;
+        DRM_ID      SID         = DRM_ID_EMPTY;
+        CDMi_RESULT cr          = CDMi_SUCCESS;
+
+        ::memcpy( (void*)SID.rgb, (const void*)&sessionID[0], DRM_ID_SIZE );
+
+        DRM_RESULT err = Drm_SecureStop_GenerateChallenge(
+                &keySystemCtx->drmAppctx,
+                &SID,
+                m_cbPublisherCert,
+                m_pbPublisherCert,
+                0,
+                nullptr,
+                &cbChallenge,
+                &pbChallenge );
 
         ReleaseKeySystemCtx(keySystem);
 
@@ -819,29 +817,28 @@ public:
             return CDMi_INVALID_ARG;
         }
 
-        DRM_ID      SID             = DRM_ID_EMPTY;
-        DRM_CHAR   *pcchCustomData  = NULL;
-        DRM_DWORD   cchCustomData   = 0;
-        CDMi_RESULT cr              = CDMi_SUCCESS;
-        DRM_RESULT  err             = DRM_SUCCESS;
-
-        memcpy( (void*)SID.rgb, (const void*)&f_sessionID[0], DRM_ID_SIZE );
-
         auto keySystemCtx = AcquireKeySystemCtx(keySystem);
         if (keySystemCtx == nullptr) {
             PR_LOG(PR_LOG_ERROR, "No valid context available for keySystem[%s]", keySystem.c_str());
             return CDMi_S_FALSE;
         }
 
-        err = Drm_SecureStop_ProcessResponse(
-                            &keySystemCtx->drmAppctx,
-                            &SID,
-                            m_cbPublisherCert,
-                            m_pbPublisherCert,
-                            f_serverResponseLength,
-                            f_serverResponse,
-                            &cchCustomData,
-                            &pcchCustomData);
+        DRM_ID      SID             = DRM_ID_EMPTY;
+        DRM_CHAR   *pcchCustomData  = NULL;
+        DRM_DWORD   cchCustomData   = 0;
+        CDMi_RESULT cr              = CDMi_SUCCESS;
+
+        memcpy( (void*)SID.rgb, (const void*)&f_sessionID[0], DRM_ID_SIZE );
+
+        DRM_RESULT err = Drm_SecureStop_ProcessResponse(
+                &keySystemCtx->drmAppctx,
+                &SID,
+                m_cbPublisherCert,
+                m_pbPublisherCert,
+                f_serverResponseLength,
+                f_serverResponse,
+                &cchCustomData,
+                &pcchCustomData);
 
         ReleaseKeySystemCtx(keySystem);
 
