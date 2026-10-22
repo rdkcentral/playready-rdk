@@ -100,59 +100,6 @@ void InitializeLogLevel()
             g_logLevel);
 }
 
-class ScopedAppContext
-{
-public:
-    explicit ScopedAppContext(const std::string& storeFilePath)
-        : m_storeWchar(createDrmWchar(storeFilePath))
-        , m_appOpaqueBuffer(new DRM_BYTE[MINIMUM_APPCONTEXT_OPAQUE_BUFFER_SIZE])
-    {
-        DRM_VOID* pDrmOemContext = NULL;
-        DRM_CONST_STRING dstrHDSPath = DRM_EMPTY_DRM_STRING;
-        dstrHDSPath.pwszString = m_storeWchar;
-        dstrHDSPath.cchString = storeFilePath.length();
-
-        svpGetDrmOEMContext(&pDrmOemContext);
-
-        m_initResult = Drm_Initialize(&m_appCtx, pDrmOemContext,
-                            m_appOpaqueBuffer, MINIMUM_APPCONTEXT_OPAQUE_BUFFER_SIZE,
-                            &dstrHDSPath);
-        if (DRM_FAILED(m_initResult)) {
-            PR_LOG(PR_LOG_WARN, "Drm_Initialize failed for store '%s'. 0x%X - %s", storeFilePath.c_str(), m_initResult, DRM_ERR_NAME(m_initResult));
-            delete [] m_appOpaqueBuffer;
-            m_appOpaqueBuffer = nullptr;
-        }
-    }
-
-    ~ScopedAppContext()
-    {
-        if (!DRM_FAILED(m_initResult)) {
-            DRM_BYTE* pbOldBuf = nullptr;
-            DRM_DWORD cbOldBuf = 0;
-            DRM_RESULT err = Drm_GetOpaqueBuffer(&m_appCtx, &pbOldBuf, &cbOldBuf);
-            if (DRM_FAILED(err)) {
-                PR_LOG(PR_LOG_WARN, "Drm_GetOpaqueBuffer failed. 0x%X - %s", err, DRM_ERR_NAME(err));
-            }
-            Drm_Uninitialize(&m_appCtx);
-            delete [] (pbOldBuf != nullptr ? pbOldBuf : m_appOpaqueBuffer);
-            m_appOpaqueBuffer = nullptr;
-        }
-        delete [] m_storeWchar;
-    }
-
-    ScopedAppContext(const ScopedAppContext&) = delete;
-    ScopedAppContext& operator=(const ScopedAppContext&) = delete;
-
-    bool IsValid() const { return !DRM_FAILED(m_initResult); }
-    DRM_APP_CONTEXT* Get() { return &m_appCtx; }
-
-private:
-    DRM_WCHAR* m_storeWchar;
-    DRM_BYTE* m_appOpaqueBuffer;
-    DRM_APP_CONTEXT m_appCtx{};
-    DRM_RESULT m_initResult{};
-};
-
 namespace CDMi {
 
 class PlayReady : public IMediaKeys, public IMediaKeysExt {
@@ -192,36 +139,33 @@ private:
     PlayReady (const PlayReady&) = delete;
     PlayReady& operator= (const PlayReady&) = delete;
 
-    std::shared_ptr<KeySystemCtx> AcquireKeySystemCtx(const std::string& keySystem)
+    KeySystemCtx* AcquireKeySystemCtx(const std::string& keySystem) const
     {
-        PR_LOG(PR_LOG_DEBUG, "entry keySystem[%s]", keySystem.c_str());
-		
-        auto existingCtx = m_keySystemCtxs.find(keySystem);
-        if (existingCtx != m_keySystemCtxs.end()) {
-            ++existingCtx->second->mediaKeySessionsCount;
-            PR_LOG(PR_LOG_DEBUG, "mediaKeySessionsCount[%d]", existingCtx->second->mediaKeySessionsCount);
-            return existingCtx->second;
-        }
+        KeySystemCtx* keySystemCtx = nullptr;
 
-        auto keySystemCtx = std::make_shared<KeySystemCtx>();
-        CDMi_RESULT cResult = InitializeAppCtx(keySystem, keySystemCtx);
-        if (cResult != CDMi_SUCCESS) {
-            PR_LOG(PR_LOG_ERROR, "InitializeAppCtx failed for keySystem[%s]. 0x%X", keySystem.c_str(), cResult);
-            keySystemCtx.reset();
+        auto it = m_keySystemCtxs.find(keySystem);
+        if (it != m_keySystemCtxs.end()) {
+            keySystemCtx = it->second.get();
+            ++keySystemCtx->mediaKeySessionsCount;
+            PR_LOG(PR_LOG_DEBUG, "mediaKeySessionsCount[%d]", keySystemCtx->mediaKeySessionsCount);
         } else {
-            keySystemCtx->mediaKeySessionsCount = 1;
-            m_keySystemCtxs.emplace(keySystem, keySystemCtx);
-        }
+            std::unique_ptr<KeySystemCtx> ctx(new KeySystemCtx());
+            CDMi_RESULT cResult = InitializeAppCtx(getStoreLocation(keySystem), *ctx);
 
-        PR_LOG(PR_LOG_DEBUG, "exit");
+            if (cResult == CDMi_SUCCESS) {
+                ctx->mediaKeySessionsCount = 1;
+                keySystemCtx = ctx.get();
+                m_keySystemCtxs.emplace(keySystem, std::move(ctx));
+            } else {
+                PR_LOG(PR_LOG_ERROR, "InitializeAppCtx failed for keySystem[%s]. 0x%X", keySystem.c_str(), cResult);
+            }
+        }
 
         return keySystemCtx;
     }
 
-    void ReleaseKeySystemCtx(const std::string& keySystem)
-    {
-        PR_LOG(PR_LOG_DEBUG, "entry keySystem[%s]", keySystem.c_str());
-		
+    void ReleaseKeySystemCtx(const std::string& keySystem) const
+    {		
         auto keySystemCtx = m_keySystemCtxs.find(keySystem);
         if (keySystemCtx == m_keySystemCtxs.end()) {
             PR_LOG(PR_LOG_WARN, "No AppCtx found for keySystem[%s]", keySystem.c_str());
@@ -235,76 +179,62 @@ private:
         PR_LOG(PR_LOG_DEBUG, "mediaKeySessionsCount[%d]", keySystemCtx->second->mediaKeySessionsCount);
         
         if (keySystemCtx->second->mediaKeySessionsCount == 0) {
-            UninitializeAppCtx(keySystemCtx->second);
+            UninitializeAppCtx(*keySystemCtx->second);
             m_keySystemCtxs.erase(keySystemCtx);
-        }
-		
-        PR_LOG(PR_LOG_DEBUG, "exit");
-    }
-
-    void CleanExpiredLicensesInStore(const std::string& storeFilePath)
-    {
-        ScopedAppContext appCtx(storeFilePath);
-        if (appCtx.IsValid()) {
-            DRM_RESULT dr = Drm_StoreMgmt_CleanupStore(appCtx.Get(),
-                                         DRM_STORE_CLEANUP_DELETE_EXPIRED_LICENSES |
-                                         DRM_STORE_CLEANUP_DELETE_REMOVAL_DATE_LICENSES,
-                                         nullptr, 0, nullptr);
-            if (DRM_FAILED(dr)) {
-                PR_LOG(PR_LOG_ERROR, "Drm_StoreMgmt_CleanupStore failed for store '%s'. 0x%X - %s", storeFilePath.c_str(), dr, DRM_ERR_NAME(dr));
-            } else {
-                PR_LOG(PR_LOG_DEBUG, "Store cleanup succeeded for store '%s'", storeFilePath.c_str());
-            }
         }
     }
 
     void CleanLicenseStore()
     {
-        PR_LOG(PR_LOG_DEBUG, "entry");
-		
-        if (!m_readDir.empty()) {
-            DIR* dir = opendir(m_readDir.c_str());
+        std::vector<std::string> storeFilePaths;
+        DIR* dir = opendir(m_readDir.c_str());
+        if (dir) {
             struct dirent* dir_entry{};
-
-            PR_LOG(PR_LOG_INFO, "Store cleanup '%s'", m_readDir.c_str());
-            if (dir) {
-                std::string filePath;
-                while ((dir_entry = readdir(dir)) != NULL) {
-                    if (strcmp(dir_entry->d_name, ".") && strcmp(dir_entry->d_name, "..")) {
-                        filePath = m_readDir;
-                        if (filePath.back() != '/') {
-                            filePath += '/';
-                        }
-                        filePath +=  dir_entry->d_name;
-                        CleanExpiredLicensesInStore(filePath);
+            while ((dir_entry = readdir(dir)) != NULL) {
+                if (strcmp(dir_entry->d_name, ".") && strcmp(dir_entry->d_name, "..")) {
+                    std::string filePath = m_readDir;
+                    if (filePath.back() != '/') {
+                        filePath += '/';
                     }
+                    filePath += dir_entry->d_name;
+                    storeFilePaths.push_back(std::move(filePath));
                 }
-                closedir(dir);
+            }
+            closedir(dir);
+        }
+
+        for (const auto& storeFilePath : storeFilePaths) {
+            KeySystemCtx storeCtx;
+            CDMi_RESULT cResult = InitializeAppCtx(storeFilePath, storeCtx);
+            if (cResult == CDMi_SUCCESS) {
+                DRM_RESULT dr = Drm_StoreMgmt_CleanupStore(&storeCtx.drmAppctx,
+                                         DRM_STORE_CLEANUP_DELETE_EXPIRED_LICENSES |
+                                         DRM_STORE_CLEANUP_DELETE_REMOVAL_DATE_LICENSES,
+                                         nullptr, 0, nullptr);
+                PR_LOG(PR_LOG_DEBUG, "Cleanup result for store '%s'. 0x%X", storeFilePath.c_str(), dr);
+                UninitializeAppCtx(storeCtx);
+            } 
+            else {
+                PR_LOG(PR_LOG_WARN, "InitializeAppCtx failed for store '%s'", storeFilePath.c_str());
             }
         }
-		
-        PR_LOG(PR_LOG_DEBUG, "exit");
     }
 
     const std::string getStoreLocation(const std::string& keySystem) const
     {
-        std::string dir = m_storeLocation.substr(0, m_storeLocation.find_last_of("/"));
-        std::string filename = m_storeLocation.substr(m_storeLocation.find_last_of("/") + 1);
-        std::string path = dir + "/" + filename + "_" + keySystem;
-        return path;
+        return m_storeLocation + "_" + keySystem;
     }
 
 public:
 
-    PlayReady() :
-       m_keySystemCtxs{} {
+    PlayReady() {
     }
 
     ~PlayReady(void) {
         SAFE_OEM_FREE( m_pbPublisherCert );
     }
 
-    CDMi_RESULT UpdateDrmClock(DRM_APP_CONTEXT* appContext)
+    CDMi_RESULT UpdateDrmClock(DRM_APP_CONTEXT* appContext) const
     {
         DRMFILETIME               ftSystemTime; /* Initialized by Drm_SecureTime_GetValue */
         DRM_SECURETIME_CLOCK_TYPE eClockType;   /* Initialized by Drm_SecureTime_GetValue */
@@ -393,7 +323,7 @@ public:
 
         auto keySystemCtx = AcquireKeySystemCtx(keySystem);
         if (keySystemCtx == nullptr) {
-            PR_LOG(PR_LOG_ERROR, "App Context is not valid for keySystem[%s]", keySystem.c_str());
+            PR_LOG(PR_LOG_ERROR, "No valid context available for keySystem[%s]", keySystem.c_str());
             return CDMi_FAIL;
         }
 
@@ -404,7 +334,7 @@ public:
             return CDMi_FAIL;
         }
 
-        *f_ppiMediaKeySession = new CDMi::MediaKeySession(f_pbInitData, f_cbInitData, f_pbCDMData, f_cbCDMData, &keySystemCtx->drmAppctx, false, [this, keySystem]() {
+        *f_ppiMediaKeySession = new CDMi::MediaKeySession(f_pbInitData, f_cbInitData, f_pbCDMData, f_cbCDMData, &keySystemCtx->drmAppctx, [this, keySystem]() {
             SafeCriticalSection systemLock(drmAppContextMutex_);
             ReleaseKeySystemCtx(keySystem);
         });
@@ -544,19 +474,15 @@ public:
 
         SafeCriticalSection lock(drmAppContextMutex_);
         
-        auto keySystemCtx = m_keySystemCtxs.find(keySystem);
-        if (keySystemCtx == m_keySystemCtxs.end()) {
-            PR_LOG(PR_LOG_WARN, "No AppCtx found for keySystem[%s]", keySystem.c_str());
-            ScopedAppContext appCtx(getStoreLocation(keySystem));
-            if (appCtx.IsValid()) {
-                dr = Drm_SecureTime_GetValue(appCtx.Get(), &oftSystemTime, &eClockType);
-            } else {
-                return ui64RetTime;
-            }
-        } else {
-            dr = Drm_SecureTime_GetValue( ( DRM_APP_CONTEXT* ) &keySystemCtx->second->drmAppctx,
-                    &oftSystemTime, &eClockType );
+        auto keySystemCtx = AcquireKeySystemCtx(keySystem);
+        if (keySystemCtx == nullptr) {
+            PR_LOG(PR_LOG_ERROR, "No valid context available for keySystem[%s]", keySystem.c_str());
+            return ui64RetTime;
         }
+
+        dr = Drm_SecureTime_GetValue(&keySystemCtx->drmAppctx, &oftSystemTime, &eClockType);
+
+        ReleaseKeySystemCtx(keySystem);
 
         if ( dr != DRM_SUCCESS )
         {
@@ -599,7 +525,7 @@ public:
             return CDMi_FAIL;
         }
 
-        *session = new CDMi::MediaKeySession(drmHeader, drmHeaderLength, nullptr, 0, &keySystemCtx->drmAppctx, false, [this, keySystem]() {
+        *session = new CDMi::MediaKeySession(drmHeader, drmHeaderLength, nullptr, 0, &keySystemCtx->drmAppctx, [this, keySystem]() {
             SafeCriticalSection systemLock(drmAppContextMutex_);
             ReleaseKeySystemCtx(keySystem);
         });
@@ -754,28 +680,20 @@ public:
 
         ErrCheckCert();
 
-        auto keySystemCtx = m_keySystemCtxs.find(keySystem);
-        if (keySystemCtx == m_keySystemCtxs.end()) {
-            PR_LOG(PR_LOG_WARN, "No AppCtx found for keySystem[%s]", keySystem.c_str());
-            ScopedAppContext appCtx(getStoreLocation(keySystem));
-            if (appCtx.IsValid()) {
-                err = Drm_SecureStop_EnumerateSessions(
-                                    appCtx.Get(),
-                                    m_cbPublisherCert,
-                                    m_pbPublisherCert,
-                                    &cidSessions,
-                                    &pidSessions );
-            } else {
-                return CDMi_S_FALSE;
-            }
-        } else {
-            err = Drm_SecureStop_EnumerateSessions(
-                                &keySystemCtx->second->drmAppctx,
-                                m_cbPublisherCert,
-                                m_pbPublisherCert,
-                                &cidSessions,
-                                &pidSessions );
+        auto keySystemCtx = AcquireKeySystemCtx(keySystem);
+        if (keySystemCtx == nullptr) {
+            PR_LOG(PR_LOG_ERROR, "No valid context available for keySystem[%s]", keySystem.c_str());
+            return CDMi_S_FALSE;
         }
+
+        err = Drm_SecureStop_EnumerateSessions(
+                            &keySystemCtx->drmAppctx,
+                            m_cbPublisherCert,
+                            m_pbPublisherCert,
+                            &cidSessions,
+                            &pidSessions );
+
+        ReleaseKeySystemCtx(keySystem);
 
         if ( err == DRM_SUCCESS )
         {
@@ -841,34 +759,23 @@ public:
 
         ::memcpy( (void*)SID.rgb, (const void*)&sessionID[0], DRM_ID_SIZE );
 
-        auto keySystemCtx = m_keySystemCtxs.find(keySystem);
-        if (keySystemCtx == m_keySystemCtxs.end()) {
-            PR_LOG(PR_LOG_WARN, "No AppCtx found for keySystem[%s]", keySystem.c_str());
-            ScopedAppContext appCtx(getStoreLocation(keySystem));
-            if (appCtx.IsValid()) {
-                err = Drm_SecureStop_GenerateChallenge(
-                                    appCtx.Get(),
-                                    &SID,
-                                    m_cbPublisherCert,
-                                    m_pbPublisherCert,
-                                    0,
-                                    nullptr,
-                                    &cbChallenge,
-                                    &pbChallenge );
-            } else {
-                return CDMi_S_FALSE;
-            }
-        } else {
-            err = Drm_SecureStop_GenerateChallenge(
-                                &keySystemCtx->second->drmAppctx,
-                                &SID,
-                                m_cbPublisherCert,
-                                m_pbPublisherCert,
-                                0,
-                                nullptr,
-                                &cbChallenge,
-                                &pbChallenge );
+        auto keySystemCtx = AcquireKeySystemCtx(keySystem);
+        if (keySystemCtx == nullptr) {
+            PR_LOG(PR_LOG_ERROR, "No valid context available for keySystem[%s]", keySystem.c_str());
+            return CDMi_S_FALSE;
         }
+
+        err = Drm_SecureStop_GenerateChallenge(
+                            &keySystemCtx->drmAppctx,
+                            &SID,
+                            m_cbPublisherCert,
+                            m_pbPublisherCert,
+                            0,
+                            nullptr,
+                            &cbChallenge,
+                            &pbChallenge );
+
+        ReleaseKeySystemCtx(keySystem);
 
         if ( err != DRM_SUCCESS )
         {
@@ -920,34 +827,23 @@ public:
 
         memcpy( (void*)SID.rgb, (const void*)&f_sessionID[0], DRM_ID_SIZE );
 
-        auto keySystemCtx = m_keySystemCtxs.find(keySystem);
-        if (keySystemCtx == m_keySystemCtxs.end()) {
-            PR_LOG(PR_LOG_WARN, "No AppCtx found for keySystem[%s]", keySystem.c_str());
-            ScopedAppContext appCtx(getStoreLocation(keySystem));
-            if (appCtx.IsValid()) {
-                err = Drm_SecureStop_ProcessResponse(
-                                    appCtx.Get(),
-                                    &SID,
-                                    m_cbPublisherCert,
-                                    m_pbPublisherCert,
-                                    f_serverResponseLength,
-                                    f_serverResponse,
-                                    &cchCustomData,
-                                    &pcchCustomData);
-            } else {
-                return CDMi_S_FALSE;
-            }
-        } else {
-            err = Drm_SecureStop_ProcessResponse(
-                                &keySystemCtx->second->drmAppctx,
-                                &SID,
-                                m_cbPublisherCert,
-                                m_pbPublisherCert,
-                                f_serverResponseLength,
-                                f_serverResponse,
-                                &cchCustomData,
-                                &pcchCustomData);
+        auto keySystemCtx = AcquireKeySystemCtx(keySystem);
+        if (keySystemCtx == nullptr) {
+            PR_LOG(PR_LOG_ERROR, "No valid context available for keySystem[%s]", keySystem.c_str());
+            return CDMi_S_FALSE;
         }
+
+        err = Drm_SecureStop_ProcessResponse(
+                            &keySystemCtx->drmAppctx,
+                            &SID,
+                            m_cbPublisherCert,
+                            m_pbPublisherCert,
+                            f_serverResponseLength,
+                            f_serverResponse,
+                            &cchCustomData,
+                            &pcchCustomData);
+
+        ReleaseKeySystemCtx(keySystem);
 
         if ( err == DRM_E_SECURESTOP_SESSION_NOT_FOUND )
         {
@@ -984,7 +880,7 @@ public:
     }
 
     /*Initialize the PlayReady application context*/
-    CDMi_RESULT InitializeAppCtx(const std::string& keySystem, const std::shared_ptr<KeySystemCtx>& keySystemCtx)
+    CDMi_RESULT InitializeAppCtx(const std::string& storeLocation, KeySystemCtx& keySystemCtx) const
     {
         DRM_BYTE *appOpaqueBuffer = nullptr;
         DRM_VOID *pDrmOemContext = NULL;
@@ -993,7 +889,6 @@ public:
         CDMi_RESULT cResult = CDMi_S_FALSE;
         DRM_CONST_STRING dstrHDSPath = DRM_EMPTY_DRM_STRING;
 
-        std::string storeLocation = getStoreLocation(keySystem);
         dstrHDSPath.pwszString =  createDrmWchar(storeLocation);
         dstrHDSPath.cchString = storeLocation.length();
 
@@ -1009,7 +904,7 @@ public:
 
             PR_LOG(PR_LOG_DEBUG, "call Drm_Initialize");
 
-            DRM_RESULT err  = Drm_Initialize(&keySystemCtx->drmAppctx, pDrmOemContext,
+            DRM_RESULT err  = Drm_Initialize(&keySystemCtx.drmAppctx, pDrmOemContext,
                                 appOpaqueBuffer,
                                 MINIMUM_APPCONTEXT_OPAQUE_BUFFER_SIZE,
                                 &dstrHDSPath);
@@ -1022,7 +917,7 @@ public:
                 PR_LOG(PR_LOG_WARN, "Remove store path and try again");
                 //if drmstore file is corrupted, remove it and init again, playready will create a new one
                 remove(storeLocation.c_str());
-                err = Drm_Initialize(&keySystemCtx->drmAppctx, pDrmOemContext,
+                err = Drm_Initialize(&keySystemCtx.drmAppctx, pDrmOemContext,
                                     appOpaqueBuffer,
                                     MINIMUM_APPCONTEXT_OPAQUE_BUFFER_SIZE,
                                     &dstrHDSPath );
@@ -1038,9 +933,9 @@ public:
             cResult = CDMi_SUCCESS;
             PR_LOG(PR_LOG_DEBUG, "Drm_Initialize success");
 
-            keySystemCtx->pbRevocationBuffer = new DRM_BYTE[REVOCATION_BUFFER_SIZE];
-            ::memset(keySystemCtx->pbRevocationBuffer, 0, REVOCATION_BUFFER_SIZE);
-            err = Drm_Revocation_SetBuffer(&keySystemCtx->drmAppctx, keySystemCtx->pbRevocationBuffer, REVOCATION_BUFFER_SIZE);
+            keySystemCtx.pbRevocationBuffer = new DRM_BYTE[REVOCATION_BUFFER_SIZE];
+            ::memset(keySystemCtx.pbRevocationBuffer, 0, REVOCATION_BUFFER_SIZE);
+            err = Drm_Revocation_SetBuffer(&keySystemCtx.drmAppctx, keySystemCtx.pbRevocationBuffer, REVOCATION_BUFFER_SIZE);
             if(DRM_FAILED(err)) {
                 PR_LOG(PR_LOG_ERROR, "Drm_Revocation_SetBuffer failed. 0x%X - %s",err,DRM_ERR_NAME(err));
                 cResult = CDMi_FAIL;
@@ -1048,7 +943,7 @@ public:
             }
 
             /* Update the DRM Secure Clock time */
-            cResult = UpdateDrmClock(&keySystemCtx->drmAppctx);
+            cResult = UpdateDrmClock(&keySystemCtx.drmAppctx);
             if (CDMi_SUCCESS != cResult) {
                 PR_LOG(PR_LOG_ERROR, "Drm Clock update failed");
                 cResult = CDMi_FAIL;
@@ -1067,12 +962,12 @@ public:
 
         if(CDMi_SUCCESS != cResult) {
             if(isAppCtxInitialized) {
-                Drm_Uninitialize(&keySystemCtx->drmAppctx);
+                Drm_Uninitialize(&keySystemCtx.drmAppctx);
             }
 
             delete [] appOpaqueBuffer;
-            delete [] keySystemCtx->pbRevocationBuffer;
-            keySystemCtx->pbRevocationBuffer = nullptr;
+            delete [] keySystemCtx.pbRevocationBuffer;
+            keySystemCtx.pbRevocationBuffer = nullptr;
         }
 
         delete [] dstrHDSPath.pwszString;
@@ -1082,7 +977,7 @@ public:
     }
 
     /*Unitialize the playready context and opaque buffer*/
-    CDMi_RESULT UninitializeAppCtx(const std::shared_ptr<KeySystemCtx>& keySystemCtx)
+    CDMi_RESULT UninitializeAppCtx(KeySystemCtx& keySystemCtx) const
     {
         DRM_BYTE *pbOldBuf = nullptr;
         DRM_DWORD cbOldBuf = 0;
@@ -1091,21 +986,21 @@ public:
         PR_LOG(PR_LOG_DEBUG, "entry sessionCount[%d]", m_sessionCount);
 
         for(;;) {
-            DRM_RESULT err = Drm_GetOpaqueBuffer( &keySystemCtx->drmAppctx, &pbOldBuf, &cbOldBuf );
+            DRM_RESULT err = Drm_GetOpaqueBuffer( &keySystemCtx.drmAppctx, &pbOldBuf, &cbOldBuf );
             if(DRM_FAILED(err))
             {
                 PR_LOG(PR_LOG_WARN, "Drm_GetOpaqueBuffer failed. 0x%X - %s",err,DRM_ERR_NAME(err));
             }
 
-            Drm_Uninitialize(&keySystemCtx->drmAppctx);
+            Drm_Uninitialize(&keySystemCtx.drmAppctx);
 
             if ( pbOldBuf ){
                 PR_LOG(PR_LOG_TRACE, "opaquebuffer freed");
                 delete [] pbOldBuf;
             }
 
-            delete [] keySystemCtx->pbRevocationBuffer;
-            keySystemCtx->pbRevocationBuffer = nullptr;
+            delete [] keySystemCtx.pbRevocationBuffer;
+            keySystemCtx.pbRevocationBuffer = nullptr;
 
             cResult = CDMi_SUCCESS;
 
@@ -1315,7 +1210,7 @@ public:
 private:
     DRM_WCHAR* drmdir_;
 
-    std::unordered_map<std::string /*key system id*/, std::shared_ptr<KeySystemCtx>> m_keySystemCtxs;
+    std::unordered_map<std::string /*key system id*/, std::unique_ptr<KeySystemCtx>> m_keySystemCtxs;
 
     string m_readDir;
     string m_storeLocation;

@@ -523,7 +523,7 @@ ErrorExit:
     return dr;
 }
 
-MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitData, const uint8_t *f_pbCDMData, uint32_t f_cbCDMData, DRM_APP_CONTEXT * poAppContext, bool initiateChallengeGeneration /* = false */, std::function<void()> releaseAppContext /* = nullptr */)
+MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitData, const uint8_t *f_pbCDMData, uint32_t f_cbCDMData, DRM_APP_CONTEXT * poAppContext, std::function<void()> releaseAppContext)
     : m_eKeyState(KEY_CLOSED)
     , m_pbChallenge(nullptr)
     , m_cbChallenge(0)
@@ -531,7 +531,7 @@ MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitD
     , m_customData(reinterpret_cast<const char*>(f_pbCDMData), f_cbCDMData)
     , m_piCallback(nullptr)
     , mSessionId(0)
-    , mInitiateChallengeGeneration(initiateChallengeGeneration)
+    , mInitiateChallengeGeneration(false)
     , m_cHeaderKIDs(0)
     , m_pdstrHeaderKIDs( nullptr )
     , m_eHeaderVersion( DRM_HEADER_VERSION_UNKNOWN )
