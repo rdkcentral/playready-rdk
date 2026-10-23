@@ -53,7 +53,7 @@ struct KeySystemCtx
 {
     DRM_APP_CONTEXT drmAppctx{};
     DRM_BYTE *pbRevocationBuffer{};
-    int32_t mediaKeySessionsCount{};
+    int32_t appContextRefCount{};
 };
 
 WPEFramework::Core::CriticalSection drmAppContextMutex_;
@@ -146,14 +146,14 @@ private:
         auto it = m_keySystemCtxs.find(keySystem);
         if (it != m_keySystemCtxs.end()) {
             keySystemCtx = it->second.get();
-            ++keySystemCtx->mediaKeySessionsCount;
-            PR_LOG(PR_LOG_DEBUG, "mediaKeySessionsCount[%d]", keySystemCtx->mediaKeySessionsCount);
+            ++keySystemCtx->appContextRefCount;
+            PR_LOG(PR_LOG_DEBUG, "appContextRefCount[%d]", keySystemCtx->appContextRefCount);
         } else {
             std::unique_ptr<KeySystemCtx> ctx(new KeySystemCtx());
             CDMi_RESULT cResult = InitializeAppCtx(getStoreLocation(keySystem), *ctx);
 
             if (cResult == CDMi_SUCCESS) {
-                ctx->mediaKeySessionsCount = 1;
+                ctx->appContextRefCount = 1;
                 keySystemCtx = ctx.get();
                 m_keySystemCtxs.emplace(keySystem, std::move(ctx));
             } else {
@@ -172,13 +172,13 @@ private:
             return;
         }
 
-        if (keySystemCtx->second->mediaKeySessionsCount > 0) {
-            --keySystemCtx->second->mediaKeySessionsCount;
+        if (keySystemCtx->second->appContextRefCount > 0) {
+            --keySystemCtx->second->appContextRefCount;
         }
 
-        PR_LOG(PR_LOG_DEBUG, "mediaKeySessionsCount[%d]", keySystemCtx->second->mediaKeySessionsCount);
+        PR_LOG(PR_LOG_DEBUG, "appContextRefCount[%d]", keySystemCtx->second->appContextRefCount);
         
-        if (keySystemCtx->second->mediaKeySessionsCount == 0) {
+        if (keySystemCtx->second->appContextRefCount == 0) {
             UninitializeAppCtx(*keySystemCtx->second);
             m_keySystemCtxs.erase(keySystemCtx);
         }
@@ -983,7 +983,7 @@ public:
         PR_LOG(PR_LOG_DEBUG, "entry sessionCount[%d]", m_sessionCount);
 
         for(;;) {
-            DRM_RESULT err = Drm_GetOpaqueBuffer( &keySystemCtx.drmAppctx, &pbOldBuf, &cbOldBuf );
+            DRM_RESULT err = Drm_GetOpaqueBuffer(&keySystemCtx.drmAppctx, &pbOldBuf, &cbOldBuf);
             if(DRM_FAILED(err))
             {
                 PR_LOG(PR_LOG_WARN, "Drm_GetOpaqueBuffer failed. 0x%X - %s",err,DRM_ERR_NAME(err));
