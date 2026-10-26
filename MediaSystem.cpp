@@ -27,6 +27,7 @@
 
 #include <drmint64.h>
 #include <unordered_map>
+#include <dirent.h>
 
 #define CLEAN_ON_INIT 1
 
@@ -431,7 +432,7 @@ public:
             for (auto& entry : m_sessionMap)
             {
                 uint32_t sessionId = entry.first;
-                IMediaKeySession* session = entry.second;
+                IMediaKeySession *session = entry.second;
 
                 if (session == f_piMediaKeySession)
                 {
@@ -557,7 +558,7 @@ public:
     }
 
     /*Return a list of the current SecureStop sessions.*/
-    CDMi_RESULT GetSecureStopIds(const std::string &keySystem, uint8_t ids[], uint16_t idsLength, uint32_t & count)
+    CDMi_RESULT GetSecureStopIds(const std::string &keySystem, uint8_t ids[], uint16_t idsLength, uint32_t &count)
     {
         PR_LOG(PR_LOG_DEBUG, "entry");
         SafeCriticalSection lock(drmAppContextMutex_);
@@ -618,8 +619,8 @@ public:
             const std::string &keySystem,
             const uint8_t sessionID[],
             uint32_t sessionIDLength,
-            uint8_t * f_pbChallenge,
-            uint16_t & f_cbChallenge)
+            uint8_t *f_pbChallenge,
+            uint16_t &f_cbChallenge)
     {
         PR_LOG(PR_LOG_DEBUG, "entry");
         SafeCriticalSection lock(drmAppContextMutex_);
@@ -944,7 +945,7 @@ public:
         for (auto &entry : m_sessionMap)
         {
             uint32_t sessionId = entry.first;
-            IMediaKeySession* session = entry.second;
+            IMediaKeySession *session = entry.second;
 
             if (session != nullptr)
             {
@@ -959,7 +960,7 @@ public:
 
         for (auto &ctx : m_keySystemCtxs)
         {
-            PR_LOG(PR_LOG_ERROR, "Key system context[%s] not released properly, appContextRefCount[%d]", ctx.first.c_str(), ctx.second.appContextRefCount);
+            PR_LOG(PR_LOG_ERROR, "Keysystem context[%s] not released properly, appContextRefCount[%d]", ctx.first.c_str(), ctx.second.appContextRefCount);
             UninitializeAppCtx(ctx.second);
             ctx.second.appContextRefCount = 0;
         }
