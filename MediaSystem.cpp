@@ -56,6 +56,8 @@ struct KeySystemCtx
     int32_t appContextRefCount{};
 };
 
+constexpr const char *kDrmStoreFileExtension = ".store";
+
 WPEFramework::Core::CriticalSection drmAppContextMutex_;
 
 static DRM_WCHAR* createDrmWchar(std::string const& s) {
@@ -139,25 +141,27 @@ private:
     PlayReady (const PlayReady&) = delete;
     PlayReady& operator= (const PlayReady&) = delete;
 
-    KeySystemCtx* AcquireKeySystemCtx(const std::string &keySystem) const
+    KeySystemCtx *AcquireKeySystemCtx(const std::string &keySystem) const
     {
         KeySystemCtx *keySystemCtx = nullptr;
 
         auto it = m_keySystemCtxs.find(keySystem);
         if (it != m_keySystemCtxs.end()) {
-            keySystemCtx = it->second.get();
+            keySystemCtx = &it->second;
             ++keySystemCtx->appContextRefCount;
             PR_LOG(PR_LOG_DEBUG, "appContextRefCount[%d]", keySystemCtx->appContextRefCount);
         } else {
-            std::unique_ptr<KeySystemCtx> ctx(new KeySystemCtx());
-            CDMi_RESULT cResult = InitializeAppCtx(getStoreLocation(keySystem), *ctx);
-
-            if (cResult == CDMi_SUCCESS) {
-                ctx->appContextRefCount = 1;
-                keySystemCtx = ctx.get();
-                m_keySystemCtxs.emplace(keySystem, std::move(ctx));
-            } else {
-                PR_LOG(PR_LOG_ERROR, "InitializeAppCtx failed for keySystem[%s]. 0x%X", keySystem.c_str(), cResult);
+            auto ctx = m_keySystemCtxs.emplace(keySystem, KeySystemCtx{});
+            if (ctx.second) {
+                keySystemCtx = &ctx.first->second;
+                CDMi_RESULT cResult = InitializeAppCtx(GetDrmStorePath(keySystem), *keySystemCtx);
+                if (cResult == CDMi_SUCCESS) {
+                    keySystemCtx->appContextRefCount = 1;
+                } else {
+                    PR_LOG(PR_LOG_ERROR, "InitializeAppCtx failed for keySystem[%s]. 0x%X", keySystem.c_str(), cResult);
+                    m_keySystemCtxs.erase(ctx.first);
+                    keySystemCtx = nullptr;
+                }
             }
         }
 
@@ -172,32 +176,34 @@ private:
             return;
         }
 
-        if (keySystemCtx->second->appContextRefCount > 0) {
-            --keySystemCtx->second->appContextRefCount;
-        }
-
-        PR_LOG(PR_LOG_DEBUG, "appContextRefCount[%d]", keySystemCtx->second->appContextRefCount);
+        --keySystemCtx->second.appContextRefCount;
+        PR_LOG(PR_LOG_DEBUG, "appContextRefCount[%d]", keySystemCtx->second.appContextRefCount);
         
-        if (keySystemCtx->second->appContextRefCount == 0) {
-            UninitializeAppCtx(*keySystemCtx->second);
+        if (keySystemCtx->second.appContextRefCount == 0) {
+            UninitializeAppCtx(keySystemCtx->second);
             m_keySystemCtxs.erase(keySystemCtx);
         }
     }
 
     void CleanLicenseStore()
     {
+        const std::string storeDir = m_storeFileBasePath.substr(0, m_storeFileBasePath.find_last_of('/'));
+        const std::string storeExtension(kDrmStoreFileExtension);
         std::vector<std::string> storeFilePaths;
-        DIR *dir = opendir(m_readDir.c_str());
+        DIR *dir = opendir(storeDir.c_str());
         if (dir) {
             struct dirent *dir_entry{};
             while ((dir_entry = readdir(dir)) != NULL) {
                 if (strcmp(dir_entry->d_name, ".") && strcmp(dir_entry->d_name, "..")) {
-                    std::string filePath = m_readDir;
-                    if (filePath.back() != '/') {
-                        filePath += '/';
+                    const std::string fileName = dir_entry->d_name;
+                    if (fileName.size() >= storeExtension.size() && fileName.compare(fileName.size() - storeExtension.size(), storeExtension.size(), storeExtension) == 0) {
+                        std::string filePath = storeDir;
+                        if (filePath.back() != '/') {
+                            filePath += '/';
+                        }
+                        filePath += fileName;
+                        storeFilePaths.push_back(std::move(filePath));
                     }
-                    filePath += dir_entry->d_name;
-                    storeFilePaths.push_back(std::move(filePath));
                 }
             }
             closedir(dir);
@@ -220,9 +226,9 @@ private:
         }
     }
 
-    const std::string getStoreLocation(const std::string &keySystem) const
+    const std::string GetDrmStorePath(const std::string &keySystem) const
     {
-        return m_storeLocation + "_" + keySystem;
+        return m_storeFileBasePath + "_" + keySystem + kDrmStoreFileExtension;
     }
 
 public:
@@ -315,8 +321,11 @@ public:
         uint32_t f_cbInitData, 
         const uint8_t *f_pbCDMData,
         uint32_t f_cbCDMData, 
-        IMediaKeySession **f_ppiMediaKeySession) {
+        IMediaKeySession **f_ppiMediaKeySession)
+    {
         DRM_RESULT rnd = DRM_S_FALSE;
+        uint32_t m_sessionId = 0;
+
         PR_LOG(PR_LOG_DEBUG, "entry");
 
         SafeCriticalSection systemLock(drmAppContextMutex_);
@@ -350,10 +359,7 @@ public:
         }
         m_sessionMap.emplace(m_sessionId, *f_ppiMediaKeySession);
 
-        /* Session count */
-        ++m_sessionCount;
-
-        PR_LOG(PR_LOG_DEBUG, "exit MediakeySession[%p] m_sessionId[%u] sessionCount[%u]", static_cast<void*>(*f_ppiMediaKeySession), m_sessionId, m_sessionCount);
+        PR_LOG(PR_LOG_DEBUG, "exit MediakeySession[%p] m_sessionId[%u] sessionCount[%d]", static_cast<void*>(*f_ppiMediaKeySession), m_sessionId, m_sessionMap.size());
         return CDMi_SUCCESS;
     }
 
@@ -403,12 +409,12 @@ public:
        return CDMi_SUCCESS;
     }
 
-    CDMi_RESULT DestroyMediaKeySession(IMediaKeySession *f_piMediaKeySession) {
-
+    CDMi_RESULT DestroyMediaKeySession(IMediaKeySession *f_piMediaKeySession)
+    {
         CDMi_RESULT cResult = CDMi_S_FALSE;
         bool sessionFound = false;
 
-        PR_LOG(PR_LOG_DEBUG, "entry m_sessionCount[%d]", m_sessionCount);
+        PR_LOG(PR_LOG_DEBUG, "entry sessionCount[%d]", m_sessionMap.size());
 
         SafeCriticalSection systemLock(drmAppContextMutex_);
 
@@ -416,12 +422,6 @@ public:
             if(f_piMediaKeySession == NULL) {
                 PR_LOG(PR_LOG_ERROR, "Invalid input, f_piMediaKeySession is null");
                 cResult = CDMi_INVALID_ARG;
-                break;
-            }
-
-            if(m_sessionCount == 0) {
-                PR_LOG(PR_LOG_ERROR, "Session is missing in sessionMap");
-                cResult = CDMi_FAIL;
                 break;
             }
 
@@ -439,12 +439,9 @@ public:
                     PR_LOG(PR_LOG_DEBUG, "Found the session[%p] Id[%u] from sessionMap", f_piMediaKeySession, sessionId);
                     const std::string keySystem = session->GetKeySystem();
                     delete session;
-                    ReleaseKeySystemCtx(keySystem);
                     /* remove the sessionId mapping from the sessionMap list */
                     m_sessionMap.erase(sessionId);
-
-                    /* decrease the session count */
-                    --m_sessionCount;
+                    ReleaseKeySystemCtx(keySystem);
                     cResult = CDMi_SUCCESS;
                     break;
                 }
@@ -501,113 +498,6 @@ public:
         }
         PR_LOG(PR_LOG_DEBUG, "exit");
         return ui64RetTime;
-    }
-
-    CDMi_RESULT CreateMediaKeySessionExt(
-            const std::string& keySystem,
-            const uint8_t drmHeader[],
-            uint32_t drmHeaderLength,
-            IMediaKeySessionExt** session) /* override */
-    {
-        DRM_RESULT rnd = DRM_S_FALSE;
-        PR_LOG(PR_LOG_DEBUG, "entry m_sessionCount[%d]", m_sessionCount);
-
-        SafeCriticalSection systemLock(drmAppContextMutex_);
-
-        if(session == NULL) {
-            PR_LOG(PR_LOG_DEBUG, "Invalid input, session is null");
-            return CDMi_INVALID_ARG;
-        }
-
-        auto keySystemCtx = AcquireKeySystemCtx(keySystem);
-        if (keySystemCtx == nullptr) {
-            PR_LOG(PR_LOG_ERROR, "No valid context available for keySystem[%s]", keySystem.c_str());
-            return CDMi_FAIL;
-        }
-
-        *session = new CDMi::MediaKeySession(drmHeader, drmHeaderLength, nullptr, 0, &keySystemCtx->drmAppctx, keySystem);
-
-        /* Store the MediaKeySession with random generated SessionId */
-        do {
-            rnd = Oem_Random_GetBytes(nullptr, reinterpret_cast<DRM_BYTE*>(&m_sessionId), SIZEOF(m_sessionId));
-        } while (rnd == DRM_SUCCESS && (m_sessionMap.find(m_sessionId) != m_sessionMap.end()));
-
-        if (DRM_FAILED(rnd)) {
-            PR_LOG(PR_LOG_ERROR, "Failed to generate sessionId");
-            delete *session;
-            *session = nullptr;
-            ReleaseKeySystemCtx(keySystem);
-            return CDMi_FAIL;
-        }
-        m_sessionMap.emplace(m_sessionId, reinterpret_cast<IMediaKeySession*>(*session));
-
-        /* Session count */
-        ++m_sessionCount;
-
-        PR_LOG(PR_LOG_DEBUG, "exit MediakeySession[%p] m_sessionId[%u] sessionCount[%u]",reinterpret_cast<void*>(*session), m_sessionId, m_sessionCount);
-
-        return CDMi_SUCCESS;
-    }
-
-    CDMi_RESULT DestroyMediaKeySessionExt(IMediaKeySession *f_piMediaKeySession)
-    {
-        CDMi_RESULT cResult = CDMi_S_FALSE;
-        bool sessionFound = false;
-
-        SafeCriticalSection systemLock(drmAppContextMutex_);
-
-        PR_LOG(PR_LOG_DEBUG, "entry m_sessionCount[%d]", m_sessionCount);
-
-        for(;;) {
-            if(f_piMediaKeySession == NULL) {
-                PR_LOG(PR_LOG_ERROR, "Invalid input, f_piMediaKeySession is null");
-                cResult = CDMi_INVALID_ARG;
-                break;
-            }
-
-            if(m_sessionCount == 0) {
-                PR_LOG(PR_LOG_ERROR, "Session is missing in sessionMap");
-                cResult = CDMi_FAIL;
-                break;
-            }
-
-            /* Ensure the given session is valid
-            * Check the session from the sessionMap
-            */
-            for (auto& entry : m_sessionMap)
-            {
-                uint32_t sessionId = entry.first;
-                IMediaKeySession* session = entry.second;
-
-                if (session == f_piMediaKeySession)
-                {
-                    sessionFound = true;
-                    PR_LOG(PR_LOG_DEBUG, "Found the session[0x%X] Id[%u] from sessionMap", f_piMediaKeySession, sessionId);
-                    const std::string keySystem = session->GetKeySystem();
-                    delete session;
-                    ReleaseKeySystemCtx(keySystem);
-                    /* remove the sessionId mapping from the sessionMap list */
-                    m_sessionMap.erase(sessionId);
-
-                    /* decrease the session count */
-                    --m_sessionCount;
-                    cResult = CDMi_SUCCESS;
-                    break;
-                }
-            }
-
-            if(!sessionFound) {
-                PR_LOG(PR_LOG_ERROR, "session[0x%X] not found in sessionMap", f_piMediaKeySession);
-                cResult = CDMi_FAIL;
-                break;
-            }
-
-            break;
-        }
-
-        PR_LOG(PR_LOG_DEBUG, "exit result[0x%X]", cResult);
-
-        return cResult;
     }
 
     std::string GetVersionExt() const /* override */
@@ -867,11 +757,6 @@ public:
         g_dstrDrmPath.pwszString = drmdir_;
         g_dstrDrmPath.cchString = rdir.length();
 
-        // Store store location
-        std::string store(m_storeLocation);
-
-        PR_LOG(PR_LOG_DEBUG, "m_storeLocation[%s]", store.c_str());
-
         PR_LOG(PR_LOG_DEBUG, "exit");
         return CDMi_SUCCESS;
     }
@@ -889,7 +774,7 @@ public:
         dstrHDSPath.pwszString =  createDrmWchar(storeLocation);
         dstrHDSPath.cchString = storeLocation.length();
 
-        PR_LOG(PR_LOG_DEBUG, "entry m_sessionCount[%d]", m_sessionCount);
+        PR_LOG(PR_LOG_DEBUG, "entry sessionCount[%d]", m_sessionMap.size());
 
         for(;;) {
 
@@ -980,7 +865,7 @@ public:
         DRM_DWORD cbOldBuf = 0;
         CDMi_RESULT cResult = CDMi_S_FALSE;
 
-        PR_LOG(PR_LOG_DEBUG, "entry sessionCount[%d]", m_sessionCount);
+        PR_LOG(PR_LOG_DEBUG, "entry sessionCount[%d]", m_sessionMap.size());
 
         for(;;) {
             DRM_RESULT err = Drm_GetOpaqueBuffer(&keySystemCtx.drmAppctx, &pbOldBuf, &cbOldBuf);
@@ -1054,9 +939,9 @@ public:
         PR_LOG(PR_LOG_DEBUG, "entry");
         SafeCriticalSection systemLock(drmAppContextMutex_);
         
-        PR_LOG(PR_LOG_INFO, "m_sessionCount[%d]", m_sessionCount);
+        PR_LOG(PR_LOG_INFO, "sessionCount[%d]", m_sessionMap.size());
         /* Clean all the MediaKeysessions */
-        for (auto& entry : m_sessionMap)
+        for (auto &entry : m_sessionMap)
         {
             uint32_t sessionId = entry.first;
             IMediaKeySession* session = entry.second;
@@ -1071,10 +956,14 @@ public:
         }
 
         m_sessionMap.clear();
-        m_sessionCount = 0;
-        if (!m_keySystemCtxs.empty()) {
-            PR_LOG(PR_LOG_ERROR, "Key system contexts not released properly");
+
+        for (auto &ctx : m_keySystemCtxs)
+        {
+            PR_LOG(PR_LOG_ERROR, "Key system context[%s] not released properly, appContextRefCount[%d]", ctx.first.c_str(), ctx.second.appContextRefCount);
+            UninitializeAppCtx(ctx.second);
+            ctx.second.appContextRefCount = 0;
         }
+        m_keySystemCtxs.clear();
 
         delete [] drmdir_;
 
@@ -1106,7 +995,7 @@ public:
         PR_LOG(PR_LOG_DEBUG, "entry keySystem[%s]", keySystem.c_str());
         SafeCriticalSection systemLock(drmAppContextMutex_);
 
-        const std::string storeLocation = getStoreLocation(keySystem);
+        const std::string storeLocation = GetDrmStorePath(keySystem);
         cr = CDMi_SUCCESS;
         if (stat(storeLocation.c_str(), &buf) != -1)
         {
@@ -1145,7 +1034,7 @@ public:
         SafeCriticalSection lock(drmAppContextMutex_);
         CDMi_RESULT ret = CDMi_SUCCESS;
 
-        const std::string storeLocation = getStoreLocation(keySystem);
+        const std::string storeLocation = GetDrmStorePath(keySystem);
         FILE* const file = fopen(storeLocation.c_str(), "rb");
         if (!file) {
             PR_LOG(PR_LOG_ERROR, "exit. file open failed [%s]", storeLocation.c_str());
@@ -1175,11 +1064,11 @@ public:
         config.FromString(configline);
         PR_LOG(PR_LOG_DEBUG, "entry");
         m_readDir = config.ReadDir.Value();
-        m_storeLocation = config.StoreLocation.Value();
+        m_storeFileBasePath = config.StoreLocation.Value();
 
-        svpGetDrmStoragePath(m_readDir, m_storePath, m_storeLocation);
+        svpGetDrmStoragePath(m_readDir, m_storePath, m_storeFileBasePath);
  
-        PR_LOG(PR_LOG_DEBUG, "m_storeLocation[%s] m_storePath[%s] m_readDir[%s]", m_storeLocation.c_str(), 
+        PR_LOG(PR_LOG_DEBUG, "m_storeFileBasePath[%s] m_storePath[%s] m_readDir[%s]", m_storeFileBasePath.c_str(), 
                                                         m_storePath.c_str(),
                                                         m_readDir.c_str() );
         WPEFramework::Core::Directory(m_storePath.c_str()).CreatePath();
@@ -1211,16 +1100,14 @@ public:
 private:
     DRM_WCHAR* drmdir_;
 
-    std::unordered_map<std::string /*key system id*/, std::unique_ptr<KeySystemCtx>> m_keySystemCtxs;
+    mutable std::unordered_map<std::string /*key system id*/, KeySystemCtx> m_keySystemCtxs;
 
     string m_readDir;
-    string m_storeLocation;
+    string m_storeFileBasePath;
     string m_storePath;
 
     DRM_BYTE *m_pbPublisherCert = nullptr;
     DRM_DWORD m_cbPublisherCert = 0;
-    uint32_t m_sessionCount = 0;
-    uint32_t m_sessionId = 0;
     std::map<uint32_t, IMediaKeySession*> m_sessionMap;
 };
 

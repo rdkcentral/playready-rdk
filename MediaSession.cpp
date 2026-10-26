@@ -29,7 +29,6 @@
 #endif
 
 extern WPEFramework::Core::CriticalSection drmAppContextMutex_;
-extern DRM_CONST_STRING g_dstrCDMDrmStoreName;
 
 #ifdef DRM_WCHAR_CAST
 #define WCHAR_CAST DRM_WCHAR_CAST
@@ -521,7 +520,7 @@ ErrorExit:
     return dr;
 }
 
-MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitData, const uint8_t *f_pbCDMData, uint32_t f_cbCDMData, DRM_APP_CONTEXT * poAppContext, const std::string &keySystem)
+MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitData, const uint8_t *f_pbCDMData, uint32_t f_cbCDMData, DRM_APP_CONTEXT *poAppContext, const std::string &keySystem)
     : m_eKeyState(KEY_CLOSED)
     , m_pbChallenge(nullptr)
     , m_cbChallenge(0)
