@@ -29,9 +29,6 @@
 #endif
 
 extern WPEFramework::Core::CriticalSection drmAppContextMutex_;
-extern DRM_CONST_STRING g_dstrCDMDrmStoreName;
-
-#define NYI_KEYSYSTEM "keysystem-placeholder"
 
 #ifdef DRM_WCHAR_CAST
 #define WCHAR_CAST DRM_WCHAR_CAST
@@ -523,30 +520,15 @@ ErrorExit:
     return dr;
 }
 
-PlayreadySession::PlayreadySession() 
-    : m_poAppContext(nullptr)
-    , m_pbPROpaqueBuf(nullptr)
-    , m_cbPROpaqueBuf(0)
-    , m_bInitCalled(false)
-{
-    PR_LOG(PR_LOG_TRACE, "success");
-}
-
-PlayreadySession::~PlayreadySession()
-{
-    PR_LOG(PR_LOG_TRACE, "success");
-}
-
-MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitData, const uint8_t *f_pbCDMData, uint32_t f_cbCDMData, DRM_APP_CONTEXT * poAppContext, bool initiateChallengeGeneration /* = false */)
-    : m_pbRevocationBuffer(nullptr)
-    , m_eKeyState(KEY_CLOSED)
+MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitData, const uint8_t *f_pbCDMData, uint32_t f_cbCDMData, DRM_APP_CONTEXT *poAppContext, const std::string &keySystem)
+    : m_eKeyState(KEY_CLOSED)
     , m_pbChallenge(nullptr)
     , m_cbChallenge(0)
     , m_pchSilentURL(nullptr) 
     , m_customData(reinterpret_cast<const char*>(f_pbCDMData), f_cbCDMData)
     , m_piCallback(nullptr)
     , mSessionId(0)
-    , mInitiateChallengeGeneration(initiateChallengeGeneration)
+    , mInitiateChallengeGeneration(false)
     , m_cHeaderKIDs(0)
     , m_pdstrHeaderKIDs( nullptr )
     , m_eHeaderVersion( DRM_HEADER_VERSION_UNKNOWN )
@@ -558,6 +540,9 @@ MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitD
 #endif
     , m_fCommit(FALSE)
     , m_poAppContext(poAppContext)
+    , m_pbPROpaqueBuf(nullptr)
+    , m_cbPROpaqueBuf(0)
+    , m_keySystem(keySystem)
     , m_decryptInited(false)
     , m_bDRMInitializedLocally(false)
 {
@@ -596,14 +581,6 @@ MediaKeySession::MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitD
         goto ErrorExit;
     }
 
-    if (DRM_REVOCATION_IsRevocationSupported()) {
-        PR_LOG(PR_LOG_INFO, "DRM Revocation is Supported");
-        ChkMem(m_pbRevocationBuffer = (DRM_BYTE *)Oem_MemAlloc(REVOCATION_BUFFER_SIZE));
-
-        ChkDR(Drm_Revocation_SetBuffer(m_poAppContext,
-                                    m_pbRevocationBuffer,
-                                    REVOCATION_BUFFER_SIZE));
-    }
         
     ChkDR(Oem_Random_GetBytes(nullptr, (DRM_BYTE *)&oSessionID, SIZEOF(oSessionID)));
     ZEROMEM(m_rgchSessionID, SIZEOF(m_rgchSessionID));
@@ -715,7 +692,7 @@ const char *MediaKeySession::GetSessionId(void) const {
 }
 
 const char *MediaKeySession::GetKeySystem(void) const {
-  return NYI_KEYSYSTEM;
+    return m_keySystem.c_str();
 }
 
 DRM_RESULT DRM_CALL MediaKeySession::_PolicyCallback(
@@ -1471,8 +1448,6 @@ CDMi_RESULT MediaKeySession::Close(void) {
         DeleteTemporaryPersistentLicenses();
 
         mDrmHeader.clear();
-
-        SAFE_OEM_FREE(m_pbRevocationBuffer);
 
         SAFE_OEM_FREE(m_pdstrHeaderKIDs);
 

@@ -237,23 +237,7 @@ struct PlayLevels {
     uint16_t uncompressedDigitalAudioLevel_;
 };
 
-class PlayreadySession
-{
-public:
-    PlayreadySession();
-    ~PlayreadySession();
-
-    bool IsPlayreadySessionInit() { return m_bInitCalled; }
-
-protected:
-    DRM_APP_CONTEXT *m_poAppContext;
-
-    DRM_BYTE *m_pbPROpaqueBuf;
-    DRM_DWORD m_cbPROpaqueBuf;
-    bool m_bInitCalled;
-};
-
-class MediaKeySession : public PlayreadySession , public IMediaKeySession , public IMediaKeySessionExt, public IMediaKeySessionBatch {
+class MediaKeySession : public IMediaKeySession , public IMediaKeySessionExt, public IMediaKeySessionBatch {
 private:
     enum KeyState {
         // Has been initialized.
@@ -275,7 +259,7 @@ private:
     };
 public:
 
-    MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitData, const uint8_t *f_pbCDMData, uint32_t f_cbCDMData, DRM_APP_CONTEXT * poAppContext, bool initiateChallengeGeneration = false);
+    MediaKeySession(const uint8_t *f_pbInitData, uint32_t f_cbInitData, const uint8_t *f_pbCDMData, uint32_t f_cbCDMData, DRM_APP_CONTEXT *poAppContext, const std::string &keySystem);
     ~MediaKeySession();
 
     bool playreadyGenerateKeyRequest();
@@ -349,7 +333,6 @@ private:
             const DRM_LID *, const DRM_VOID *);
 
  
-    DRM_BYTE *m_pbRevocationBuffer;
     KeyState m_eKeyState;
     DRM_CHAR m_rgchSessionID[CCH_BASE64_EQUIV(SIZEOF(DRM_ID)) + 1];
       
@@ -405,6 +388,9 @@ private:
 protected:
     DRM_BOOL m_fCommit;
     DRM_APP_CONTEXT *m_poAppContext;
+    DRM_BYTE *m_pbPROpaqueBuf;
+    DRM_DWORD m_cbPROpaqueBuf;
+    std::string m_keySystem;
     bool m_decryptInited;
     bool m_bDRMInitializedLocally;
 };
