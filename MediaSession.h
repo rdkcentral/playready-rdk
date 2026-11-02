@@ -47,6 +47,7 @@
 #ifdef USE_SVP
 #include "gst_svp_meta.h"
 #endif
+#include "drm_platform/DRMPlatform.h"
 
 #ifndef SIZEOF
 #define SIZEOF sizeof
