@@ -122,6 +122,7 @@ void InitializeLogLevel()
 
 namespace CDMi {
 
+auto& platform = drm_platform::DRMPlatform::instance();
 class PlayReady : public IMediaKeys, public IMediaKeysExt {
 private:
     class Config : public WPEFramework::Core::JSON::Container {
@@ -188,7 +189,7 @@ public:
         PR_LOG(PR_LOG_DEBUG, "entry");
 
         for(;;) {
-            bIsInitSecureClockNeed = svpIsSecureClockInitNeed();
+            bIsInitSecureClockNeed = platform.isSecureClockInitNeed();
 
             PR_LOG(PR_LOG_DEBUG, "bIsInitSecureClockNeed [%d]", bIsInitSecureClockNeed);
 
@@ -828,7 +829,7 @@ public:
 
             ::memset(m_poAppContext.get(), 0, sizeof(DRM_APP_CONTEXT));
 
-            svpGetDrmOEMContext(&pDrmOemContext);
+            platform.getDrmOEMContext(&pDrmOemContext);
 
             PR_LOG(PR_LOG_DEBUG, "call Drm_Initialize");
 
@@ -877,7 +878,7 @@ public:
                 break;
             }
 
-            if( !svpLoadRevocationList())
+            if( !platform.loadRevocationList())
             {
                 PR_LOG(PR_LOG_ERROR, "Failed to load revocation list");
                 cResult = CDMi_FAIL;
@@ -1014,7 +1015,7 @@ public:
             return;
         }
         /* We can do SoC specific de-init requirement for Playready */
-        svpPlatformUninitializePlayready();
+        platform.platformUninitializePlayready();
         PR_LOG(PR_LOG_DEBUG, "exit");
     }
 
@@ -1167,7 +1168,7 @@ public:
         m_readDir = config.ReadDir.Value();
         m_storeLocation = config.StoreLocation.Value();
 
-        svpGetDrmStoragePath(m_readDir, m_storePath, m_storeLocation);
+        platform.getDrmStoragePath(m_readDir, m_storePath, m_storeLocation);
  
         PR_LOG(PR_LOG_DEBUG, "m_storeLocation[%s] m_storePath[%s] m_readDir[%s]", m_storeLocation.c_str(), 
                                                         m_storePath.c_str(),
@@ -1193,7 +1194,7 @@ public:
         InitializeLogLevel();
         PR_LOG(PR_LOG_DEBUG, "entry");
         /* We can do SoC specific requirement for Playready */
-        svpPlatformInitializePlayready();
+        platform.platformInitializePlayready();
         OnSystemConfigurationAvailable(configline);
         PR_LOG(PR_LOG_DEBUG, "exit");
     }
