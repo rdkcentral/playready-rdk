@@ -192,6 +192,7 @@ const char* KeyId::B64Str()
     return m_base64Str.c_str();
 }
 
+
 namespace CDMi {
 
 namespace {
@@ -442,10 +443,11 @@ DRM_RESULT CPRDrmPlatform::DrmPlatformInitialize()
 {
     DRM_RESULT dr = DRM_SUCCESS;
     void *pPlatformInitData = NULL;
+    auto& platform = drm_platform::DRMPlatform::instance();
 
     PR_LOG(PR_LOG_DEBUG, "entry");
 
-    svpGetDrmPlatformInitData( &pPlatformInitData);
+    platform.getDrmPlatformInitData( &pPlatformInitData);
     
     dr = DrmPlatformInitialize( (void *)pPlatformInitData );
 
@@ -457,6 +459,7 @@ DRM_RESULT CPRDrmPlatform::DrmPlatformUninitialize()
 {
     DRM_RESULT dr = DRM_SUCCESS;
     DRM_VOID *pDrmOemContext = NULL;
+    auto& platform = drm_platform::DRMPlatform::instance();
 
     PR_LOG(PR_LOG_DEBUG, "entry InitRefCount[%u]", m_dwInitRefCount);
 
@@ -467,7 +470,7 @@ DRM_RESULT CPRDrmPlatform::DrmPlatformUninitialize()
         goto ErrorExit;
     }
 
-    svpGetDrmOEMContext(&pDrmOemContext);
+    platform.getDrmOEMContext(&pDrmOemContext);
 
     if ( DRM_FAILED( (dr=Drm_Platform_Uninitialize( (void *)pDrmOemContext ) ) ) )
     {
@@ -1277,6 +1280,7 @@ void MediaKeySession::Update(const uint8_t *m_pbKeyMessageResponse, uint32_t  m_
     DRM_LICENSE_ACK *pLicenseAck = nullptr;
     DRM_DWORD decryptionMode;
     bool bIsAudioNeedNonSVPContext;
+    auto& platform = drm_platform::DRMPlatform::instance();
     
     PR_LOG(PR_LOG_DEBUG, "Entry");
 
@@ -1336,7 +1340,7 @@ void MediaKeySession::Update(const uint8_t *m_pbKeyMessageResponse, uint32_t  m_
                 goto LoopEnd;
             }
 
-            bIsAudioNeedNonSVPContext = svpIsAudioNeedNonSVPContext();
+            bIsAudioNeedNonSVPContext = platform.isAudioNeedNonSVPContext();
 
             if(bIsAudioNeedNonSVPContext)
             {
@@ -1610,6 +1614,7 @@ CDMi_RESULT MediaKeySession::DecryptMulti(
     DRM_BYTE* pEncryptedData = NULL;
     bool bIsAudioNeedNonSVPContext;
     DRM_DECRYPT_CONTEXT *pDecCtxToUse = nullptr;
+    auto& platform = drm_platform::DRMPlatform::instance();
 
     PR_LOG(PR_LOG_TRACE, "entry");
     PR_LOG(PR_LOG_TRACE, "inDataLength[%u]", inDataLength);
@@ -1619,7 +1624,7 @@ CDMi_RESULT MediaKeySession::DecryptMulti(
         return CDMi_S_FALSE;
     }
 
-    bIsVideoResCheckNeed = svpIsVideoResCheckNeed();
+    bIsVideoResCheckNeed = platform.isVideoResCheckNeed();
 
     if(bIsVideoResCheckNeed) {
         if (properties->GetMediaType() == Video) {
@@ -1635,7 +1640,7 @@ CDMi_RESULT MediaKeySession::DecryptMulti(
         }
     }
 
-    bIsDynamicSVPEncEnabled = svpIsDynamicSVPEncEnabled();
+    bIsDynamicSVPEncEnabled = platform.isDynamicSvpEncryptionEnabled();
     if(bIsDynamicSVPEncEnabled) {
         if (properties->GetMediaType() != Video) {
             useSVP = false;
@@ -1780,7 +1785,7 @@ CDMi_RESULT MediaKeySession::DecryptMulti(
         pEncryptedData = pEncryptedDataStart;
     }
 
-    bIsAudioNeedNonSVPContext = svpIsAudioNeedNonSVPContext();
+    bIsAudioNeedNonSVPContext = platform.isAudioNeedNonSVPContext();
 
     PR_LOG(PR_LOG_TRACE, "bIsAudioNeedNonSVPContext [%u] useSVP[%u]",
                                           bIsAudioNeedNonSVPContext,

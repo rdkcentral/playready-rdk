@@ -184,11 +184,12 @@ public:
         DRM_RESULT dr = DRM_SUCCESS;
         CDMi_RESULT cResult = CDMi_SUCCESS;
         bool bIsInitSecureClockNeed = false;
+        auto& platform = drm_platform::DRMPlatform::instance();
 
         PR_LOG(PR_LOG_DEBUG, "entry");
 
         for(;;) {
-            bIsInitSecureClockNeed = svpIsSecureClockInitNeed();
+            bIsInitSecureClockNeed = platform.isSecureClockInitNeed();
 
             PR_LOG(PR_LOG_DEBUG, "bIsInitSecureClockNeed [%d]", bIsInitSecureClockNeed);
 
@@ -799,6 +800,7 @@ public:
         DRM_VOID *pDrmOemContext = NULL;
         bool bIsInitSecureClockNeed = false;
         CDMi_RESULT cResult = CDMi_S_FALSE;
+        auto& platform = drm_platform::DRMPlatform::instance();
 
         PR_LOG(PR_LOG_DEBUG, "entry m_sessionCount[%d] m_isAppCtxInitialized[%d]", m_sessionCount, m_isAppCtxInitialized);
 
@@ -828,7 +830,7 @@ public:
 
             ::memset(m_poAppContext.get(), 0, sizeof(DRM_APP_CONTEXT));
 
-            svpGetDrmOEMContext(&pDrmOemContext);
+            platform.getDrmOEMContext(&pDrmOemContext);
 
             PR_LOG(PR_LOG_DEBUG, "call Drm_Initialize");
 
@@ -877,7 +879,7 @@ public:
                 break;
             }
 
-            if( !svpLoadRevocationList())
+            if( !platform.loadRevocationList())
             {
                 PR_LOG(PR_LOG_ERROR, "Failed to load revocation list");
                 cResult = CDMi_FAIL;
@@ -1007,6 +1009,7 @@ public:
     void Deinitialize(const WPEFramework::PluginHost::IShell * shell)
     {
         PR_LOG(PR_LOG_DEBUG, "entry");
+        auto& platform = drm_platform::DRMPlatform::instance();
         CDMi_RESULT cr = TeardownSystemExt();
         if (CDMi_SUCCESS != cr)
         {
@@ -1014,7 +1017,7 @@ public:
             return;
         }
         /* We can do SoC specific de-init requirement for Playready */
-        svpPlatformUninitializePlayready();
+        platform.platformUninitializePlayready();
         PR_LOG(PR_LOG_DEBUG, "exit");
     }
 
@@ -1163,11 +1166,12 @@ public:
     {
         Config config;
         config.FromString(configline);
+        auto& platform = drm_platform::DRMPlatform::instance();
         PR_LOG(PR_LOG_DEBUG, "entry");
         m_readDir = config.ReadDir.Value();
         m_storeLocation = config.StoreLocation.Value();
 
-        svpGetDrmStoragePath(m_readDir, m_storePath, m_storeLocation);
+        platform.getDrmStoragePath(m_readDir, m_storePath, m_storeLocation);
  
         PR_LOG(PR_LOG_DEBUG, "m_storeLocation[%s] m_storePath[%s] m_readDir[%s]", m_storeLocation.c_str(), 
                                                         m_storePath.c_str(),
@@ -1190,10 +1194,14 @@ public:
 
     void Initialize(const WPEFramework::PluginHost::IShell * service, const std::string& configline)
     {
+        auto& platform = drm_platform::DRMPlatform::instance();
         InitializeLogLevel();
         PR_LOG(PR_LOG_DEBUG, "entry");
+        PR_LOG(PR_LOG_DEBUG, "DRM Extended Platform init calling");
+        platform.init();
+
         /* We can do SoC specific requirement for Playready */
-        svpPlatformInitializePlayready();
+        platform.platformInitializePlayready();
         OnSystemConfigurationAvailable(configline);
         PR_LOG(PR_LOG_DEBUG, "exit");
     }
