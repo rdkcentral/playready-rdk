@@ -122,7 +122,6 @@ void InitializeLogLevel()
 
 namespace CDMi {
 
-auto& platform = drm_platform::DRMPlatform::instance();
 class PlayReady : public IMediaKeys, public IMediaKeysExt {
 private:
     class Config : public WPEFramework::Core::JSON::Container {
@@ -185,6 +184,7 @@ public:
         DRM_RESULT dr = DRM_SUCCESS;
         CDMi_RESULT cResult = CDMi_SUCCESS;
         bool bIsInitSecureClockNeed = false;
+        auto& platform = drm_platform::DRMPlatform::instance();
 
         PR_LOG(PR_LOG_DEBUG, "entry");
 
@@ -800,6 +800,7 @@ public:
         DRM_VOID *pDrmOemContext = NULL;
         bool bIsInitSecureClockNeed = false;
         CDMi_RESULT cResult = CDMi_S_FALSE;
+        auto& platform = drm_platform::DRMPlatform::instance();
 
         PR_LOG(PR_LOG_DEBUG, "entry m_sessionCount[%d] m_isAppCtxInitialized[%d]", m_sessionCount, m_isAppCtxInitialized);
 
@@ -1008,6 +1009,7 @@ public:
     void Deinitialize(const WPEFramework::PluginHost::IShell * shell)
     {
         PR_LOG(PR_LOG_DEBUG, "entry");
+        auto& platform = drm_platform::DRMPlatform::instance();
         CDMi_RESULT cr = TeardownSystemExt();
         if (CDMi_SUCCESS != cr)
         {
@@ -1164,6 +1166,7 @@ public:
     {
         Config config;
         config.FromString(configline);
+        auto& platform = drm_platform::DRMPlatform::instance();
         PR_LOG(PR_LOG_DEBUG, "entry");
         m_readDir = config.ReadDir.Value();
         m_storeLocation = config.StoreLocation.Value();
@@ -1191,8 +1194,12 @@ public:
 
     void Initialize(const WPEFramework::PluginHost::IShell * service, const std::string& configline)
     {
+        auto& platform = drm_platform::DRMPlatform::instance();
         InitializeLogLevel();
         PR_LOG(PR_LOG_DEBUG, "entry");
+        PR_LOG(PR_LOG_DEBUG, "DRM Extended Platform init calling");
+        platform.init();
+
         /* We can do SoC specific requirement for Playready */
         platform.platformInitializePlayready();
         OnSystemConfigurationAvailable(configline);

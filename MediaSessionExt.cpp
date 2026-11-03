@@ -41,7 +41,7 @@ const DRM_CONST_STRING PLAY_RIGHT = CREATE_DRM_STRING(PLAY);
 
 const KeyId KeyId::EmptyKeyId;
 
-extern drm_platform::DRMPlatform platform;
+
 namespace CDMi {
 
 std::map<KeyId, DECRYPT_CONTEXT> mBindMap;
@@ -99,7 +99,7 @@ CDMi_RESULT MediaKeySession::BindKeyNow(DECRYPT_CONTEXT decryptContext)
     bool bIsAudioNeedNonSVPContext;
     CDMi_RESULT result = CDMi_SUCCESS;
     DRM_RESULT dr;
-
+    auto& platform = drm_platform::DRMPlatform::instance();
     PR_LOG(PR_LOG_DEBUG, "entry");
 
     for(;;)
@@ -335,6 +335,7 @@ CDMi_RESULT MediaKeySession::SelectKeyId( const uint8_t f_keyLength, const uint8
     DRM_DWORD decryptionMode;
     CDMi_RESULT result = CDMi_SUCCESS;
     bool bIsAudioNeedNonSVPContext;
+    auto& platform = drm_platform::DRMPlatform::instance();
 
     PR_LOG(PR_LOG_DEBUG, "entry");
 

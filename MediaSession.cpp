@@ -192,7 +192,7 @@ const char* KeyId::B64Str()
     return m_base64Str.c_str();
 }
 
-extern drm_platform::DRMPlatform platform;
+
 namespace CDMi {
 
 namespace {
@@ -443,6 +443,7 @@ DRM_RESULT CPRDrmPlatform::DrmPlatformInitialize()
 {
     DRM_RESULT dr = DRM_SUCCESS;
     void *pPlatformInitData = NULL;
+    auto& platform = drm_platform::DRMPlatform::instance();
 
     PR_LOG(PR_LOG_DEBUG, "entry");
 
@@ -458,6 +459,7 @@ DRM_RESULT CPRDrmPlatform::DrmPlatformUninitialize()
 {
     DRM_RESULT dr = DRM_SUCCESS;
     DRM_VOID *pDrmOemContext = NULL;
+    auto& platform = drm_platform::DRMPlatform::instance();
 
     PR_LOG(PR_LOG_DEBUG, "entry InitRefCount[%u]", m_dwInitRefCount);
 
@@ -1278,6 +1280,7 @@ void MediaKeySession::Update(const uint8_t *m_pbKeyMessageResponse, uint32_t  m_
     DRM_LICENSE_ACK *pLicenseAck = nullptr;
     DRM_DWORD decryptionMode;
     bool bIsAudioNeedNonSVPContext;
+    auto& platform = drm_platform::DRMPlatform::instance();
     
     PR_LOG(PR_LOG_DEBUG, "Entry");
 
@@ -1611,6 +1614,7 @@ CDMi_RESULT MediaKeySession::DecryptMulti(
     DRM_BYTE* pEncryptedData = NULL;
     bool bIsAudioNeedNonSVPContext;
     DRM_DECRYPT_CONTEXT *pDecCtxToUse = nullptr;
+    auto& platform = drm_platform::DRMPlatform::instance();
 
     PR_LOG(PR_LOG_TRACE, "entry");
     PR_LOG(PR_LOG_TRACE, "inDataLength[%u]", inDataLength);
