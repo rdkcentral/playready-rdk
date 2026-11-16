@@ -128,8 +128,12 @@ endif()
     target_include_directories(${DRM_PLUGIN_NAME} PRIVATE ${CMAKE_SYSROOT}/usr/include/glib-2.0)
     target_include_directories(${DRM_PLUGIN_NAME} PRIVATE ${CMAKE_SYSROOT}/usr/lib/glib-2.0/include)
     target_include_directories(${DRM_PLUGIN_NAME} PRIVATE ${CMAKE_SYSROOT}/usr/include/WPEFramework)
-    target_link_libraries(${DRM_PLUGIN_NAME} gstsvpext DRMPlatform)
+    target_link_libraries(${DRM_PLUGIN_NAME} gstsvpext)
 #endif()
+
+if ("${OCDM_DRM_EXT_ENABLED}" STREQUAL "ON")
+    target_link_libraries(${DRM_PLUGIN_NAME} DRMPlatform)
+endif()
 
 if("${DRM_ERROR_NAME_SUPPORT}" STREQUAL "ON")
     add_definitions( -DDRM_ERROR_NAME_SUPPORT )

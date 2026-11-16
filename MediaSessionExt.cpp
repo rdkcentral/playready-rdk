@@ -99,7 +99,10 @@ CDMi_RESULT MediaKeySession::BindKeyNow(DECRYPT_CONTEXT decryptContext)
     bool bIsAudioNeedNonSVPContext;
     CDMi_RESULT result = CDMi_SUCCESS;
     DRM_RESULT dr;
+#if defined OCDM_DRM_EXT_ENABLED
     auto& platform = drm_platform::DRMPlatform::instance();
+#endif
+
     PR_LOG(PR_LOG_DEBUG, "entry");
 
     for(;;)
@@ -145,7 +148,12 @@ CDMi_RESULT MediaKeySession::BindKeyNow(DECRYPT_CONTEXT decryptContext)
             break;
         }
 
+#if defined OCDM_DRM_EXT_ENABLED
         bIsAudioNeedNonSVPContext = platform.isAudioNeedNonSVPContext();
+#else
+        bIsAudioNeedNonSVPContext = svpIsAudioNeedNonSVPContext();
+#endif
+
         PR_LOG(PR_LOG_TRACE, "bIsAudioNeedNonSVPContext[%d]", bIsAudioNeedNonSVPContext);
 
         if(bIsAudioNeedNonSVPContext)
@@ -335,7 +343,9 @@ CDMi_RESULT MediaKeySession::SelectKeyId( const uint8_t f_keyLength, const uint8
     DRM_DWORD decryptionMode;
     CDMi_RESULT result = CDMi_SUCCESS;
     bool bIsAudioNeedNonSVPContext;
+#if defined OCDM_DRM_EXT_ENABLED
     auto& platform = drm_platform::DRMPlatform::instance();
+#endif
 
     PR_LOG(PR_LOG_DEBUG, "entry");
 
@@ -402,7 +412,11 @@ CDMi_RESULT MediaKeySession::SelectKeyId( const uint8_t f_keyLength, const uint8
             break;
         }
 
+#if defined OCDM_DRM_EXT_ENABLED
         bIsAudioNeedNonSVPContext = platform.isAudioNeedNonSVPContext();
+#else
+        bIsAudioNeedNonSVPContext = svpIsAudioNeedNonSVPContext();
+#endif
 
         if(bIsAudioNeedNonSVPContext)
         {

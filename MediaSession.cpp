@@ -443,12 +443,18 @@ DRM_RESULT CPRDrmPlatform::DrmPlatformInitialize()
 {
     DRM_RESULT dr = DRM_SUCCESS;
     void *pPlatformInitData = NULL;
+#if defined OCDM_DRM_EXT_ENABLED
     auto& platform = drm_platform::DRMPlatform::instance();
+#endif
 
     PR_LOG(PR_LOG_DEBUG, "entry");
 
+#if defined OCDM_DRM_EXT_ENABLED
     platform.getDrmPlatformInitData( &pPlatformInitData);
-    
+#else
+    svpGetDrmPlatformInitData( &pPlatformInitData);
+#endif
+
     dr = DrmPlatformInitialize( (void *)pPlatformInitData );
 
     PR_LOG(PR_LOG_DEBUG, "exit: 0x%X - %s", dr,DRM_ERR_NAME(dr));
@@ -459,7 +465,9 @@ DRM_RESULT CPRDrmPlatform::DrmPlatformUninitialize()
 {
     DRM_RESULT dr = DRM_SUCCESS;
     DRM_VOID *pDrmOemContext = NULL;
+#if defined OCDM_DRM_EXT_ENABLED
     auto& platform = drm_platform::DRMPlatform::instance();
+#endif
 
     PR_LOG(PR_LOG_DEBUG, "entry InitRefCount[%u]", m_dwInitRefCount);
 
@@ -470,7 +478,11 @@ DRM_RESULT CPRDrmPlatform::DrmPlatformUninitialize()
         goto ErrorExit;
     }
 
+#if defined OCDM_DRM_EXT_ENABLED
     platform.getDrmOEMContext(&pDrmOemContext);
+#else
+    svpGetDrmOEMContext(&pDrmOemContext);
+#endif
 
     if ( DRM_FAILED( (dr=Drm_Platform_Uninitialize( (void *)pDrmOemContext ) ) ) )
     {
@@ -1280,8 +1292,10 @@ void MediaKeySession::Update(const uint8_t *m_pbKeyMessageResponse, uint32_t  m_
     DRM_LICENSE_ACK *pLicenseAck = nullptr;
     DRM_DWORD decryptionMode;
     bool bIsAudioNeedNonSVPContext;
+#if defined OCDM_DRM_EXT_ENABLED
     auto& platform = drm_platform::DRMPlatform::instance();
-    
+#endif
+
     PR_LOG(PR_LOG_DEBUG, "Entry");
 
     ChkBOOL(m_eKeyState == KEY_PENDING, DRM_E_INVALIDARG);
@@ -1340,7 +1354,11 @@ void MediaKeySession::Update(const uint8_t *m_pbKeyMessageResponse, uint32_t  m_
                 goto LoopEnd;
             }
 
+#if defined OCDM_DRM_EXT_ENABLED
             bIsAudioNeedNonSVPContext = platform.isAudioNeedNonSVPContext();
+#else
+            bIsAudioNeedNonSVPContext = svpIsAudioNeedNonSVPContext();
+#endif
 
             if(bIsAudioNeedNonSVPContext)
             {
@@ -1614,7 +1632,9 @@ CDMi_RESULT MediaKeySession::DecryptMulti(
     DRM_BYTE* pEncryptedData = NULL;
     bool bIsAudioNeedNonSVPContext;
     DRM_DECRYPT_CONTEXT *pDecCtxToUse = nullptr;
+#if defined OCDM_DRM_EXT_ENABLED
     auto& platform = drm_platform::DRMPlatform::instance();
+#endif
 
     PR_LOG(PR_LOG_TRACE, "entry");
     PR_LOG(PR_LOG_TRACE, "inDataLength[%u]", inDataLength);
@@ -1624,7 +1644,11 @@ CDMi_RESULT MediaKeySession::DecryptMulti(
         return CDMi_S_FALSE;
     }
 
+#if defined OCDM_DRM_EXT_ENABLED
     bIsVideoResCheckNeed = platform.isVideoResCheckNeed();
+#else
+    bIsVideoResCheckNeed = svpIsVideoResCheckNeed();
+#endif
 
     if(bIsVideoResCheckNeed) {
         if (properties->GetMediaType() == Video) {
@@ -1640,7 +1664,12 @@ CDMi_RESULT MediaKeySession::DecryptMulti(
         }
     }
 
+#if defined OCDM_DRM_EXT_ENABLED
     bIsDynamicSVPEncEnabled = platform.isDynamicSvpEncryptionEnabled();
+#else
+    bIsDynamicSVPEncEnabled = svpIsDynamicSVPEncEnabled();
+#endif
+
     if(bIsDynamicSVPEncEnabled) {
         if (properties->GetMediaType() != Video) {
             useSVP = false;
@@ -1785,7 +1814,11 @@ CDMi_RESULT MediaKeySession::DecryptMulti(
         pEncryptedData = pEncryptedDataStart;
     }
 
+#if defined OCDM_DRM_EXT_ENABLED
     bIsAudioNeedNonSVPContext = platform.isAudioNeedNonSVPContext();
+#else
+    bIsAudioNeedNonSVPContext = svpIsAudioNeedNonSVPContext();
+#endif
 
     PR_LOG(PR_LOG_TRACE, "bIsAudioNeedNonSVPContext [%u] useSVP[%u]",
                                           bIsAudioNeedNonSVPContext,

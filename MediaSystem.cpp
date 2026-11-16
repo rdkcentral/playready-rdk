@@ -184,12 +184,18 @@ public:
         DRM_RESULT dr = DRM_SUCCESS;
         CDMi_RESULT cResult = CDMi_SUCCESS;
         bool bIsInitSecureClockNeed = false;
+#if defined OCDM_DRM_EXT_ENABLED
         auto& platform = drm_platform::DRMPlatform::instance();
+#endif
 
         PR_LOG(PR_LOG_DEBUG, "entry");
 
         for(;;) {
+#if defined OCDM_DRM_EXT_ENABLED
             bIsInitSecureClockNeed = platform.isSecureClockInitNeed();
+#else
+            bIsInitSecureClockNeed = svpIsSecureClockInitNeed();
+#endif
 
             PR_LOG(PR_LOG_DEBUG, "bIsInitSecureClockNeed [%d]", bIsInitSecureClockNeed);
 
@@ -800,7 +806,9 @@ public:
         DRM_VOID *pDrmOemContext = NULL;
         bool bIsInitSecureClockNeed = false;
         CDMi_RESULT cResult = CDMi_S_FALSE;
+#if defined OCDM_DRM_EXT_ENABLED
         auto& platform = drm_platform::DRMPlatform::instance();
+#endif
 
         PR_LOG(PR_LOG_DEBUG, "entry m_sessionCount[%d] m_isAppCtxInitialized[%d]", m_sessionCount, m_isAppCtxInitialized);
 
@@ -830,7 +838,11 @@ public:
 
             ::memset(m_poAppContext.get(), 0, sizeof(DRM_APP_CONTEXT));
 
+#if defined OCDM_DRM_EXT_ENABLED
             platform.getDrmOEMContext(&pDrmOemContext);
+#else
+            svpGetDrmOEMContext(&pDrmOemContext);
+#endif
 
             PR_LOG(PR_LOG_DEBUG, "call Drm_Initialize");
 
@@ -879,8 +891,11 @@ public:
                 break;
             }
 
-            if( !platform.loadRevocationList())
-            {
+#if defined OCDM_DRM_EXT_ENABLED
+            if( !platform.loadRevocationList()) {
+#else
+            if( !svpLoadRevocationList()) {
+#endif
                 PR_LOG(PR_LOG_ERROR, "Failed to load revocation list");
                 cResult = CDMi_FAIL;
                 break;
@@ -1009,7 +1024,10 @@ public:
     void Deinitialize(const WPEFramework::PluginHost::IShell * shell)
     {
         PR_LOG(PR_LOG_DEBUG, "entry");
+#if defined OCDM_DRM_EXT_ENABLED
         auto& platform = drm_platform::DRMPlatform::instance();
+#endif
+
         CDMi_RESULT cr = TeardownSystemExt();
         if (CDMi_SUCCESS != cr)
         {
@@ -1017,7 +1035,11 @@ public:
             return;
         }
         /* We can do SoC specific de-init requirement for Playready */
+#if defined OCDM_DRM_EXT_ENABLED
         platform.platformUninitializePlayready();
+#else
+        svpPlatformUninitializePlayready();
+#endif
         PR_LOG(PR_LOG_DEBUG, "exit");
     }
 
@@ -1166,13 +1188,19 @@ public:
     {
         Config config;
         config.FromString(configline);
+#if defined OCDM_DRM_EXT_ENABLED
         auto& platform = drm_platform::DRMPlatform::instance();
+#endif
+
         PR_LOG(PR_LOG_DEBUG, "entry");
         m_readDir = config.ReadDir.Value();
         m_storeLocation = config.StoreLocation.Value();
-
+#if defined OCDM_DRM_EXT_ENABLED
         platform.getDrmStoragePath(m_readDir, m_storePath, m_storeLocation);
- 
+#else
+        svpGetDrmStoragePath(m_readDir, m_storePath, m_storeLocation);
+#endif
+
         PR_LOG(PR_LOG_DEBUG, "m_storeLocation[%s] m_storePath[%s] m_readDir[%s]", m_storeLocation.c_str(), 
                                                         m_storePath.c_str(),
                                                         m_readDir.c_str() );
@@ -1194,14 +1222,21 @@ public:
 
     void Initialize(const WPEFramework::PluginHost::IShell * service, const std::string& configline)
     {
+#if defined OCDM_DRM_EXT_ENABLED
         auto& platform = drm_platform::DRMPlatform::instance();
+#endif
+
         InitializeLogLevel();
         PR_LOG(PR_LOG_DEBUG, "entry");
+#if defined OCDM_DRM_EXT_ENABLED
         PR_LOG(PR_LOG_DEBUG, "DRM Extended Platform init calling");
         platform.init();
 
         /* We can do SoC specific requirement for Playready */
         platform.platformInitializePlayready();
+#else
+        svpPlatformInitializePlayready();
+#endif
         OnSystemConfigurationAvailable(configline);
         PR_LOG(PR_LOG_DEBUG, "exit");
     }
