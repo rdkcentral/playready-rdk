@@ -757,13 +757,7 @@ void MediaKeySession::Run(const IMediaKeySessionCallback *f_piMediaKeySessionCal
         m_piCallback = const_cast<IMediaKeySessionCallback *>(f_piMediaKeySessionCallback);
 
         if (mInitiateChallengeGeneration) {
-            PR_LOG(PR_LOG_INFO, "Call PersistentLicenseCheck...");
-            if ( CDMi_SUCCESS != PersistentLicenseCheck() ) {
-                PR_LOG(PR_LOG_INFO, "PersistentLicenseCheck failed and invoke playreadyGenerateKeyRequest");
-                playreadyGenerateKeyRequest();
-            } else {
-                PR_LOG(PR_LOG_INFO, "PersistentLicenseCheck is success");
-            }
+            playreadyGenerateKeyRequest();
         }
     } else {
         m_piCallback = nullptr;
@@ -1035,96 +1029,6 @@ ErrorExit:
     }
 
     return dr;
-}
-
-CDMi_RESULT MediaKeySession::PersistentLicenseCheck() {
-    SafeCriticalSection systemLock(drmAppContextMutex_);
-#ifdef NO_PERSISTENT_LICENSE_CHECK
-    // DELIA-51437: The Webkit EME implementation used by OTT apps
-    // such as Amazon and YouTube fails when the key is usable from
-    // just the init data.  Webkit is expecting a license request
-    // message and the lack of this message prevents the session from
-    // loading correctly.
-    //
-    // The EME concept of a persistent session uses the Session Id to
-    // reload a session, not the raw Key ID.  We do not current
-    // support that type of session in the OCDM.  Apps wishing to use
-    // persistent keys should directly link to PR4 or the OCDM should
-    // be rewritten to use PR4's CDMI API
-    // (modules/cdmi/real/drmcdmireal.c).
-    PR_LOG(PR_LOG_DEBUG, "PersistentLicenseCheck: not supported");
-    return CDMi_S_FALSE;
-#else
-    DRM_RESULT dr = DRM_SUCCESS;
-    DRM_CONTENT_SET_PROPERTY eContentPropertyType = DRM_CSP_HEADER_NOT_SET;
-
-    if ( !mDrmHeader.size() ) {
-        fprintf(stderr, "[%s:%d] mDrmHeader not set",__FUNCTION__,__LINE__);
-        return CDMi_FAIL;
-    }
-    if ( m_pdstrHeaderKIDs == NULL || m_cHeaderKIDs == 0 ){
-        fprintf(stderr, "[%s:%d] key ids not set",__FUNCTION__,__LINE__);
-        return CDMi_FAIL;
-    }
-
-    if ( m_eHeaderVersion == DRM_HEADER_VERSION_4_2 )
-        eContentPropertyType = DRM_CSP_V4_2_HEADER;
-    else if ( m_eHeaderVersion == DRM_HEADER_VERSION_4_3 )
-        eContentPropertyType = DRM_CSP_V4_3_HEADER;
-    else{
-        eContentPropertyType = DRM_CSP_AUTODETECT_HEADER;
-    }
-
-    for( DRM_DWORD idx = 0; idx < m_cHeaderKIDs; idx++ ){
-
-        KeyId keyId;
-        keyId.keyDecode(m_pdstrHeaderKIDs[ idx ]);
-        keyId.setKeyIdOrder(KeyId::KEYID_ORDER_GUID_LE);
-
-        DECRYPT_CONTEXT decryptContext;
-
-        if ( CDMi_SUCCESS != SetKeyIdProperty( m_pdstrHeaderKIDs[idx].pwszString,
-                m_pdstrHeaderKIDs[idx].cchString ) ) {
-            fprintf(stderr, "[%s:%d] SetKeyIdProperty failed. %s",__FUNCTION__,__LINE__,printGuid(keyId));
-            ChkDR( DRM_E_FAIL );
-        }
-
-        decryptContext = NEW_DECRYPT_CONTEXT();
-
-        dr = ReaderBind(
-                    g_rgpdstrRights,
-                    NO_OF(g_rgpdstrRights),
-                    _PolicyCallback,
-                    &m_playreadyLevels,
-                    &(decryptContext->oDrmDecryptContext) );
-        if ( DRM_FAILED( dr ) ){
-            ChkDR( dr );
-        }
-
-        decryptContext->keyId = keyId;
-        m_DecryptContextVector.push_back(decryptContext);
-    }
-
-ErrorExit:
-
-    if ( DRM_FAILED( dr ) ){
-        CloseDecryptContexts();
-        return CDMi_FAIL;
-    }
-
-    if ( m_piCallback )
-    {
-        for (DECRYPT_CONTEXT &p : m_DecryptContextVector)
-        {
-            m_piCallback->OnKeyStatusUpdate(MapDrToKeyMessage( dr ), (const uint8_t *)p->keyId.getmBytes(), DRM_ID_SIZE);
-        }
-        m_piCallback->OnKeyStatusesUpdated();
-    }
-
-    m_eKeyState = KEY_READY;
-
-    return CDMi_SUCCESS;
-#endif
 }
 
 // Allow persistent PlayReady licenses to be used in a temporary

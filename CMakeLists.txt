@@ -2,6 +2,7 @@
 # following copyright and licenses apply:
 #
 # Copyright (c) 2025 RDK Management
+# Copyright 2026 Liberty Global Service B.V.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -150,13 +151,6 @@ if("${PLAYREADY_VERSION_4_6}" STREQUAL "ON")
     message(STATUS "PLAYREADY_VERSION_4_6 is ON")
 else()
     message(STATUS "PLAYREADY_VERSION_4_6 is OFF")
-endif()
-
-if("${NO_PERSISTENT_LICENSE_CHECK}" STREQUAL "ON")
-    add_definitions( -DNO_PERSISTENT_LICENSE_CHECK=1 )
-    message(STATUS "NO_PERSISTENT_LICENSE_CHECK is ON")
-else()
-    message(STATUS "NO_PERSISTENT_LICENSE_CHECK is OFF")
 endif()
 
 if("${TEE_CONFIG_NEED}" STREQUAL "ON")

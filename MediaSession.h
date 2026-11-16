@@ -358,7 +358,6 @@ private:
     void* m_pSVPContext;
     unsigned int m_rpcID;
 #endif
-    CDMi_RESULT PersistentLicenseCheck();
     DRM_RESULT ProcessLicenseResponse(
                             DRM_PROCESS_LIC_RESPONSE_FLAG    f_eResponseFlag,
                     const   DRM_BYTE                        *f_pbResponse,
