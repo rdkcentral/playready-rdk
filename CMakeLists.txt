@@ -131,6 +131,13 @@ endif()
     target_link_libraries(${DRM_PLUGIN_NAME} gstsvpext)
 #endif()
 
+if ("${OCDM_DRM_EXT_ENABLED}" STREQUAL "ON")
+    target_compile_definitions(${DRM_PLUGIN_NAME} PRIVATE OCDM_DRM_EXT_ENABLED)
+    target_link_libraries(${DRM_PLUGIN_NAME} DRMPlatform)
+else()
+    target_compile_definitions(${DRM_PLUGIN_NAME} PRIVATE OCDM_DRM_EXT_NOT_ENABLED)
+endif()
+
 if("${DRM_ERROR_NAME_SUPPORT}" STREQUAL "ON")
     add_definitions( -DDRM_ERROR_NAME_SUPPORT )
     message(STATUS "DRM_ERROR_NAME_SUPPORT is ON")
